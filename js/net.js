@@ -261,8 +261,8 @@ function remoteGlint(st, op) {
   const tx = CAMERA.position.x - _glp.x, ty = CAMERA.position.y - _glp.y, tz = CAMERA.position.z - _glp.z, L = Math.hypot(tx, ty, tz);
   if (L < 8) return;
   const dot = (tx * fx + ty * fy + tz * fz) / L;
-  const s = smoothT((dot - 0.86) / 0.12);   // glints when they look roughly your way, brightest straight down the barrel
-  if (s > 0.02) fxGlint(_glp, s * (st.scoped ? 1 : 0.5));
+  const s = smoothT((dot - 0.7) / 0.25) * smoothT((L - 15) / 20);   // any time they're scoped and roughly facing you
+  if (s > 0.02) hudGlint(_glp, s * (st.scoped ? 1 : 0.6));
 }
 function remoteShot(m) {
   const r = REMOTES.get(m.id); if (!Array.isArray(m.o) || !Array.isArray(m.v)) return;

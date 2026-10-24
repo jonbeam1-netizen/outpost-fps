@@ -1,7 +1,8 @@
 'use strict';
 // ---------- Menus, settings, loadout, HUD ----------
 const store = { get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
-const SETTINGS = Object.assign({ vol: 10, sens: 1, adsSens: 0.8, fov: 70, shadows: 2, scale: 1, grass: 1, grain: 1, post: 1, aimMode: 'hold', invert: 0, fullscreen: 1 }, store.get('outpost-settings', {}));
+const SETTINGS = Object.assign({ vol: 10, sens: 1, adsSens: 1, fov: 70, shadows: 2, scale: 1, grass: 1, grain: 1, post: 1, aimMode: 'hold', invert: 0, fullscreen: 1 }, store.get('outpost-settings', {}));
+if (!SETTINGS.adsV) { if (SETTINGS.adsSens === 0.8) SETTINGS.adsSens = 1; SETTINGS.adsV = 1; }   // scope sensitivity is now a multiplier on matched scaling: 1 = same feel at every zoom
 if (!SETTINGS.fovV) { if (SETTINGS.fov === 80) SETTINGS.fov = 70; SETTINGS.fovV = 1; }   // FOV is vertical now: the old default 80 was ~115° wide
 const PROFILE = Object.assign({ name: '', outfit: 'woodland', skin: 0 }, store.get('holdover-profile', {}));
 if (!OUTFITS[PROFILE.outfit]) PROFILE.outfit = Object.keys(OUTFITS)[0];
@@ -302,6 +303,28 @@ function hudKillFeed(k, v, w, hs) {
 }
 function hudFeedText(txt, t = 4) { const el = document.createElement('div'); el.textContent = txt; el.style.borderRightColor = '#8d927f'; $('killfeed').prepend(el); HUD.feed.push({ el, t }); }
 function hudCenter(txt, t = 2) { const c = $('centerMsg'); c.textContent = txt; c.style.opacity = 1; HUD.centerT = t; }
+// ---------- Scope glint: drawn on the HUD so glow, fog and distance can't swallow it ----------
+const GLINTS = []; let _glN = 0;
+const _gv = new V3(), _gd = new V3();
+function hudGlint(p, s) { if (_glN < 16) { const g = GLINTS[_glN] || (GLINTS[_glN] = { p: new V3(), s: 0 }); g.p.copy(p); g.s = s; _glN++; } }
+function drawGlints() {
+  const cv = $('glintCv'); if (!cv) return;
+  const W = window.innerWidth, H = window.innerHeight;
+  if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+  const c = cv.getContext('2d'); c.clearRect(0, 0, W, H);
+  const t = performance.now() / 1000;
+  for (let i = 0; i < _glN; i++) {
+    const g = GLINTS[i];
+    _gd.subVectors(g.p, CAMERA.position); const L = _gd.length(); _gd.divideScalar(L);
+    if (rayWorld(CAMERA.position, _gd, L - 0.6, true)) continue;   // a wall in the way
+    _gv.copy(g.p).project(CAMERA); if (_gv.z > 1 || Math.abs(_gv.x) > 1 || Math.abs(_gv.y) > 1) continue;
+    const x = (_gv.x * 0.5 + 0.5) * W, y = (-_gv.y * 0.5 + 0.5) * H, tw = 0.8 + 0.2 * Math.sin(t * 9 + i * 2) * Math.sin(t * 5.3 + i);
+    c.globalAlpha = clamp(g.s, 0, 1) * tw;
+    c.fillStyle = 'rgba(0,0,0,0.45)'; c.beginPath(); c.arc(x, y, 2.6, 0, TAU); c.fill();   // dark rim: reads on a bright sky too
+    c.fillStyle = '#fffaf0'; c.beginPath(); c.arc(x, y, 1.7, 0, TAU); c.fill();
+  }
+  c.globalAlpha = 1; _glN = 0;
+}
 function killerDistance(id) { const r = REMOTES.get(id); return r && r.state ? Math.round(r.state.pos.distanceTo(PL.pos)) : 0; }
 // hearts and plates: four hearts of 25, two plates of 25, each drawn partly full
 function hudVitals() {
@@ -416,7 +439,7 @@ function hudTick(dt) {
   const pistolAim = w && w.def.pistol && PL.adsT > 0.5;   // aiming the Deagle: just a small dot on the front sight
   ch.classList.toggle('dotOnly', !!pistolAim);
   ch.style.opacity = PL.alive ? (pistolAim ? 0.9 : clamp(1 - PL.adsT * 2, 0, 1) * (PL.sprintT > 0.5 ? 0.3 : 1)) : 0;
-  drawScope(dt);
+  drawGlints(); drawScope(dt);
   SFX.heartbeat(PL.alive && PL.hp <= 25 ? 1 : 0);
   // hit marker, vignette, damage arcs, feed, centre message
   HUD.hitT -= dt; $('hitmarker').style.opacity = HUD.hitT > 0 ? 1 : 0;

@@ -259,8 +259,10 @@ function fireWeapon() {
   // recoil: part of it climbs the view for good, part is a kick that settles
   const mz = MUZZLES[w.mods.muzzle], rm = (mz && mz.recoil ? mz.recoil : 1) * [1, 0.8, 0.55][PL.stance] * (VM.gun && VM.gun.bipod && PL.stance && PL.still > 0.3 ? 0.6 : 1);
   const rv = d.recoil.v * rm * Math.PI / 180, rh = d.recoil.h * rm * Math.PI / 180;
-  PL.pitch = clamp(PL.pitch + rv * 0.35, -1.5, 1.5); PL.yaw += rand(-rh, rh) * 0.4;
-  PL.recoilP += rv * 0.65; PL.recoilY += rand(-rh, rh) * 0.5;
+  // the kick pops the view up and settles back to the aim point; semis keep a little climb so spamming costs
+  const keep = d.kind === 'bolt' ? 0 : 0.15, hk = rand(-rh, rh);
+  PL.pitch = clamp(PL.pitch + rv * keep, -1.5, 1.5); PL.yaw += hk * keep;
+  PL.recoilP += rv * (1 - keep); PL.recoilY += hk * (1 - keep);
   PL.kick = Math.min(1.5, PL.kick + (d.pistol ? 0.9 : 1.4)); PL.shotSway = 1;
   SFX.shot(d.snd, null, supp, w.id);
   vmMuzzleFlash(supp, d.pistol ? 1 : 1.6);
@@ -358,7 +360,8 @@ const _pe = new V3(), _pf = new V3();
 const scopeFov = z => 2 * Math.atan(Math.tan(27.5 * Math.PI / 180) / z) * 180 / Math.PI;
 function cameraTick(dt) {
   // mouse look (slower through a scope so the reticle moves the same on screen)
-  const sens = SETTINGS.sens * 0.0022 * (PL.adsT > 0.5 ? SETTINGS.adsSens * (CAMERA.fov / SETTINGS.fov) : 1);
+  const zoomK = Math.tan(CAMERA.fov * Math.PI / 360) / Math.tan(SETTINGS.fov * Math.PI / 360);   // 0% monitor distance, like CS2/Valorant
+  const sens = SETTINGS.sens * 0.0022 * zoomK * lerp(1, SETTINGS.adsSens, Math.max(PL.scopeA || 0, PL.adsT * (curW() && curW().def.pistol ? 1 : 0)));
   PL.yaw -= INPUT.dx * sens; PL.pitch -= INPUT.dy * sens * (SETTINGS.invert ? -1 : 1);
   PL.pitch = clamp(PL.pitch, -1.52, 1.52);
   PL.swayX = lerp(PL.swayX, clamp(INPUT.dx * 0.02, -1, 1), 1 - Math.exp(-dt * 10)); PL.swayY = lerp(PL.swayY, clamp(INPUT.dy * 0.02, -1, 1), 1 - Math.exp(-dt * 10));
