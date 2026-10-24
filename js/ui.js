@@ -1,7 +1,7 @@
 'use strict';
 // ---------- Menus, settings, loadout, HUD ----------
 const store = { get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
-const SETTINGS = Object.assign({ vol: 10, sens: 1, adsSens: 0.8, fov: 80, shadows: 2, scale: 1, grass: 1, aimMode: 'hold', invert: 0 }, store.get('outpost-settings', {}));
+const SETTINGS = Object.assign({ vol: 10, sens: 1, adsSens: 0.8, fov: 80, shadows: 2, scale: 1, grass: 1, aimMode: 'hold', invert: 0, fullscreen: 1 }, store.get('outpost-settings', {}));
 const PROFILE = Object.assign({ name: '', outfit: 'ranger', skin: 0 }, store.get('outpost-profile', {}));
 const LOADOUT = Object.assign({ primary: 'm4', mods: {}, glockMuzzle: 'none' }, store.get('outpost-loadout', {}));
 PRIMARIES.forEach(id => { LOADOUT.mods[id] = Object.assign({}, WEAPONS[id].def, LOADOUT.mods[id] || {}); });
@@ -29,6 +29,7 @@ function settingsUI() {
   bind('sGrass', 'grass', null, v => v, v => parseInt(v, 10));
   bind('sAimMode', 'aimMode', null, v => v, v => v);
   bind('sInvert', 'invert', null, v => v, v => parseInt(v, 10));
+  bind('sFull', 'fullscreen', null, v => v, v => parseInt(v, 10));
   let back = 'menu';
   const open = from => { back = from; $('settings').hidden = false; };
   $('btnSettings').onclick = () => open('menu');
@@ -170,7 +171,23 @@ function hudChat(id, text) {
   $('killfeed').prepend(el); HUD.feed.push({ el, t: 8 });
   while ($('killfeed').children.length > 7) $('killfeed').lastChild.remove();
 }
-function lockPointer() { const c = $('view'); try { const p = c.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) {} }
+function lockPointer() {
+  const c = $('view');
+  const grab = () => { try { const p = c.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) {} };
+  // Fullscreen + keyboard lock (Chrome/Edge) sends Ctrl+W and friends to the game instead of closing the tab
+  grab();   // first, while the click still counts as a user gesture
+  if (SETTINGS.fullscreen && !document.fullscreenElement && document.documentElement.requestFullscreen) {
+    document.documentElement.requestFullscreen({ navigationUI: 'hide' })
+      .then(() => { if (navigator.keyboard && navigator.keyboard.lock) navigator.keyboard.lock().catch(() => {}); if (!document.pointerLockElement) grab(); })
+      .catch(() => {});
+  }
+}
+function releaseFullscreen() {
+  try { if (navigator.keyboard && navigator.keyboard.unlock) navigator.keyboard.unlock(); } catch (e) {}
+  try { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); } catch (e) {}
+}
+// With the keyboard locked, Esc reaches the page instead of the browser, so pause ourselves
+const keyboardLocked = () => !!(document.fullscreenElement && navigator.keyboard && navigator.keyboard.lock);
 
 // ---------- Game start / leave ----------
 function startGame() {
@@ -192,6 +209,7 @@ function startOffline() {
 function leaveToMenu(msg) {
   netLeave(); GAME.running = false; PL.alive = false; closeCmd();
   try { document.exitPointerLock(); } catch (e) {}
+  releaseFullscreen();
   $('hud').hidden = true; $('pause').hidden = true; $('deathScreen').hidden = true; showMenu(false);
   if (VM.root) VM.root.visible = false;
   netStatus(msg || '');

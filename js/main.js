@@ -67,6 +67,15 @@ function inputInit() {
   window.addEventListener('keydown', e => {
     if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
     if (e.code === 'Tab' || (GAME.running && e.code === 'Space')) e.preventDefault();
+    if (GAME.running && (e.ctrlKey || e.metaKey)) e.preventDefault();   // keep Ctrl+W/R/T away from the browser where it lets us
+    // under keyboard lock the browser no longer handles Esc: pause / resume ourselves
+    if (GAME.running && e.code === 'Escape' && keyboardLocked()) {
+      e.preventDefault();
+      if (INPUT.locked) document.exitPointerLock();
+      else if (!$('settings').hidden) $('settings').hidden = true;
+      else if (!$('pause').hidden) { $('pause').hidden = true; lockPointer(); }
+      return;
+    }
     if (GAME.running && !cmdOpen() && (e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'Slash' || e.code === 'KeyT')) {
       e.preventDefault(); openCmd(e.code === 'Slash' ? '/' : ''); return;
     }
@@ -86,6 +95,8 @@ function inputInit() {
   window.addEventListener('contextmenu', e => { if (GAME.running) e.preventDefault(); });
   window.addEventListener('mousemove', e => { if (INPUT.locked) { INPUT.dx += e.movementX; INPUT.dy += e.movementY; } });
   window.addEventListener('wheel', e => { if (INPUT.locked) INPUT.wheel += Math.sign(e.deltaY); }, { passive: true });
+  // leaving fullscreen (holding Esc) also releases the keyboard: show the pause menu
+  document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && GAME.running && !INPUT.locked && $('menu').hidden) $('pause').hidden = false; });
   document.addEventListener('pointerlockchange', () => {
     INPUT.locked = document.pointerLockElement === canvas;
     if (!INPUT.locked) { INPUT.mouse.l = INPUT.mouse.r = false; closeCmd(); if (GAME.running && $('menu').hidden && $('settings').hidden) $('pause').hidden = false; }
