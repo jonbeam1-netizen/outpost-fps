@@ -176,13 +176,11 @@ function fxInit(scene, vmScene, camera = null) {
     g.strokeStyle = 'rgba(20,18,16,0.6)'; g.lineWidth = 1.2; for (let i = 0; i < 6; i++) { const a = Math.random() * TAU; g.beginPath(); g.moveTo(32 + Math.cos(a) * 6, 32 + Math.sin(a) * 6); g.lineTo(32 + Math.cos(a + rand(-0.3, 0.3)) * rand(14, 26), 32 + Math.sin(a) * rand(14, 26)); g.stroke(); }
   });
   // scope glint: hot core, long horizontal anamorphic streak, short vertical spike, faint ring
-  glintTex = canvasTex(256, 256, (g, w, h) => {
-    g.globalCompositeOperation = 'lighter';
-    let gr = g.createRadialGradient(128, 128, 0, 128, 128, 128); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.1, 'rgba(255,252,240,0.95)'); gr.addColorStop(0.22, 'rgba(255,230,180,0.5)'); gr.addColorStop(0.5, 'rgba(255,210,150,0.12)'); gr.addColorStop(1, 'rgba(255,200,140,0)');
+  // the glint: a hard bright point with a hint of a cross, no halo
+  glintTex = canvasTex(64, 64, (g, w, h) => {
+    const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.18, 'rgba(255,248,230,0.9)'); gr.addColorStop(0.4, 'rgba(255,230,190,0.15)'); gr.addColorStop(1, 'rgba(255,220,180,0)');
     g.fillStyle = gr; g.fillRect(0, 0, w, h);
-    const spike = (ang, len, wid, a) => { g.save(); g.translate(128, 128); g.rotate(ang); const lg = g.createLinearGradient(-len, 0, len, 0); lg.addColorStop(0, 'rgba(255,230,190,0)'); lg.addColorStop(0.5, `rgba(255,250,240,${a})`); lg.addColorStop(1, 'rgba(255,230,190,0)'); g.fillStyle = lg; g.beginPath(); g.moveTo(-len, 0); g.lineTo(0, -wid); g.lineTo(len, 0); g.lineTo(0, wid); g.fill(); g.restore(); };
-    spike(0, 127, 7, 1); spike(Math.PI / 2, 80, 5, 0.8); spike(Math.PI / 4, 45, 2.5, 0.5); spike(-Math.PI / 4, 45, 2.5, 0.5);
-    g.strokeStyle = 'rgba(255,220,180,0.12)'; g.lineWidth = 2; g.beginPath(); g.arc(128, 128, 60, 0, TAU); g.stroke();
+    g.fillStyle = 'rgba(255,250,240,0.35)'; g.fillRect(4, 31, 56, 2); g.fillRect(31, 10, 2, 44);
   });
   const atlas = atlasTex(); atlas.wrapS = atlas.wrapT = THREE.ClampToEdgeWrapping;
   FX.ps = makePS(4000, false, atlas); FX.pa = makePS(1200, true, atlas); scene.add(FX.ps.pts); scene.add(FX.pa.pts);
@@ -399,7 +397,7 @@ function fxScreenBlood(amount) {
     SB.list.push({ x, y, s, r: Math.random() * TAU, img: SB.spr[(Math.random() * SB.spr.length) | 0], t: 0, life, drips });
   }
 }
-function fxKnifeSlash() { SB.slash = 0; SB.slashDir = Math.random() < 0.5 ? 1 : -1; }
+function fxKnifeSlash() { SB.slash = 0; }
 function screenTick(dt) {
   if (!SB.cv) return;
   if (!SB.list.length && SB.vig <= 0 && SB.slash < 0) { if (SB.dirty) { SB.g.clearRect(0, 0, SB.w, SB.h); SB.dirty = false; } return; }
@@ -425,14 +423,21 @@ function screenTick(dt) {
     }
   }
   g.globalAlpha = 1;
-  if (SB.slash >= 0) {   // knife: a quick bright arc sweeping across the view
-    SB.slash += dt; const k = SB.slash / 0.22;
+  if (SB.slash >= 0) {   // knife: a bright arc that follows the blade from upper right to lower left
+    SB.slash += dt;
+    const k = (SB.slash - 0.1) / 0.24;   // waits for the wind-up, then runs with the sweep
     if (k >= 1) SB.slash = -1;
-    else {
-      const cx = W / 2, cy = H * 0.62, R = Math.min(W, H) * 0.55, s = SB.slashDir, a0 = -2.5, sweep = 1.9, head = a0 + sweep * Math.min(1, k * 1.6), tail = a0 + sweep * Math.max(0, k * 1.6 - 0.55);
-      for (let j = 0; j < 3; j++) {
-        g.strokeStyle = `rgba(235,235,225,${(1 - k) * [0.12, 0.25, 0.6][j]})`; g.lineWidth = [14, 7, 2.5][j] * Math.min(W, H) / 400;
-        g.beginPath(); g.ellipse(cx, cy, R, R * 0.45, s * 0.35, s > 0 ? tail : -head - Math.PI, s > 0 ? head : -tail - Math.PI); g.stroke();
+    else if (k > 0) {
+      const head = Math.min(1, k * 1.5), tail = Math.max(0, k * 1.5 - 0.5), n = 18, sc = Math.min(W, H) / 400;
+      const P = t => [W * (0.86 - 0.78 * t), H * (0.36 + 0.24 * t) - H * 0.07 * Math.sin(Math.PI * t)];   // curved, bulging upward
+      g.lineCap = 'round';
+      for (let i = 0; i < n; i++) {
+        const t0 = lerp(tail, head, i / n), t1 = lerp(tail, head, (i + 1) / n), q = (i + 1) / n;   // q: 0 at the tail, 1 at the blade
+        const [x0, y0] = P(t0), [x1, y1] = P(t1);
+        for (let j = 0; j < 2; j++) {
+          g.strokeStyle = `rgba(240,240,230,${(1 - k * 0.8) * q * [0.2, 0.75][j]})`; g.lineWidth = [12, 3][j] * sc * (0.3 + 0.7 * q);
+          g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+        }
       }
     }
   }
@@ -658,9 +663,11 @@ function fxGlint(p, strength = 1) {
   let dc = 20, pr = 1.3;
   if (cam) { _v1.subVectors(cam.position, p); dc = _v1.length(); pr = cam.projectionMatrix.elements[5]; s.position.copy(p).addScaledVector(_v1.divideScalar(Math.max(dc, 1e-3)), Math.min(0.15, dc * 0.5)); } else s.position.copy(p);
   // twinkles (a lens catching the light as it sways) so the eye picks it out of a dark window
-  const st = clamp(strength, 0, 1), tw = 0.75 + 0.25 * Math.sin(FX.time * 9 + p.x) * Math.sin(FX.time * 5.3 + p.z), size = Math.max(0.3, dc * 0.075 * (0.35 + 0.65 * st) * tw / Math.pow(pr, 0.6));
-  s.scale.set(size * 1.6, size, 1); s.material.rotation = rand(-0.03, 0.03);
-  s.material.opacity = st * (0.7 + 0.3 * tw); s.visible = true; s.userData.f = FX.frame;
+  // a small, fixed on-screen size (same through any scope) so it gives the sniper away without hiding them; up close it fades out
+  // just a pinprick of light on the lens: a few pixels at any range or zoom, no halo
+  const st = clamp(strength, 0, 1), tw = 0.8 + 0.2 * Math.sin(FX.time * 9 + p.x) * Math.sin(FX.time * 5.3 + p.z), size = Math.max(0.02, dc * 0.007 * (0.6 + 0.4 * st) * tw / pr);
+  s.scale.set(size, size, 1); s.material.rotation = rand(-0.03, 0.03);
+  s.material.opacity = st * 0.9 * (0.75 + 0.25 * tw) * smoothT((dc - 15) / 30); s.visible = true; s.userData.f = FX.frame;
 }
 
 // Ejected brass in the viewmodel scene (falls out of view). big: rifle case

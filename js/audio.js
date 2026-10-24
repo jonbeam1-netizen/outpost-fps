@@ -417,7 +417,7 @@ const SFX = {
   breathHold() { if (!this.ctx) return; const out = this.out(0.7, 0), t = this.now(); this.noise(t, 0, out, 'bandpass', 1500, 0.8, 0.07, 0.12, 0.35); },
   breathOut() { if (!this.ctx) return; const out = this.out(0.7, 0), t = this.now(); this.noise(t, 0, out, 'bandpass', 800, 0.7, 0.09, 0.9, 0.08); },
 
-  // ---------- Ambience: wind with gusts, and now and then a crow, a dog, far thunder, loose sheet metal ----------
+  // ---------- Ambience: wind with gusts, and now and then far thunder ----------
   ambient(on) {
     this.ambWant = !!on; if (!this.ctx) return;
     const ctx = this.ctx, now = ctx.currentTime;
@@ -448,9 +448,8 @@ const SFX = {
       this.whistle.fl.frequency.setTargetAtTime(rand(900, 1500), now, d / 3);
     }
     if (now > this.evT) {
-      this.evT = now + rand(18, 45);
-      const r = Math.random(), t = now + 0.1;
-      if (r < 0.38) this.crow(t); else if (r < 0.62) this.dog(t); else if (r < 0.82) this.thunder(t); else this.tin(t);
+      this.evT = now + rand(40, 90);   // thunder alone, so keep it rare
+      this.thunder(now + 0.1);   // only far thunder: no birds, dogs or banging tin in this town
     }
   },
   evOut(lpF, wet) {   // somewhere off in the town: random direction, dulled by distance, mostly reverb

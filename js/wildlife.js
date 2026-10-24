@@ -455,8 +455,9 @@ function wlCaw(ctx, tc, dest, f, g0) {
   o.connect(bp); o2.connect(m2); m2.connect(bp); bp.connect(g); g.connect(dest); o.start(tc); o2.start(tc); o.stop(tc + 0.35); o2.stop(tc + 0.35);
 }
 // output for a sound at (x,y,z): placed, dulled with distance; null when out of earshot or audio isn't running
+const WL_SOUND = false;   // birds are silent: a flush is something you have to see, not hear
 function wlOut(x, y, z, gain, roll, maxD) {
-  const ctx = SFX.ctx; if (!ctx || ctx.state !== 'running') return null;
+  const ctx = SFX.ctx; if (!WL_SOUND || !ctx || ctx.state !== 'running') return null;
   const s = SFX.spatial(_wv.set(x, y, z), roll); if (s.dist > maxD) return null;
   const far = Math.min(1, s.dist / 130), out = SFX.out(s.gain * gain, s, 0.15 + far * 0.35), lp = ctx.createBiquadFilter();
   lp.type = 'lowpass'; lp.frequency.value = lerp(9000, 1300, far); lp.connect(out);

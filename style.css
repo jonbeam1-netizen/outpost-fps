@@ -345,3 +345,6 @@ kbd { font-family: var(--f-mono); font-size: 12px; color: var(--text); backgroun
 @media (prefers-reduced-motion: reduce) {
   .menuFx .dusk, .menuFx .ember, .menuFx .glint, .logo .reticleO, .loadTxt svg, #grain { animation: none; }
 }
+
+#crosshair.dotOnly i { display: none; }
+#crosshair.dotOnly b { width: 4px; height: 4px; left: -2px; top: -2px; border-radius: 50%; background: #ff5a3c; box-shadow: 0 0 3px rgba(255,90,60,0.8); }

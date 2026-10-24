@@ -56,7 +56,7 @@ one player hosts and gets a code like `DM-7K2F`, friends type the code to join. 
 - **Kill cam.** Taken out by a rifle round? Watch it fly in from your killer's muzzle in slow motion, with range,
   flight time and drop. Press any key to skip.
 - **Mind the birds.** Crows and pigeons perch on roofs, parapets and power lines. Walk, sprint, jump or fire an unsuppressed
-  shot near them and the flock bursts into the air, loudly. Everyone (bots included) can read that as "someone's there".
+  shot near them and the flock silently bursts into the air. Anyone watching (bots included) can read that as "someone's there".
   Crouch-walk or crawl past and they stay put.
 
 ## Weapons

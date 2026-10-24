@@ -834,10 +834,11 @@ function barrel(x, z, mat = M.rust, y = null, tipped = false) {
   [0.22, 0.64].forEach(hh => G(new THREE.TorusGeometry(0.292, 0.014, 4, 12), mat, x, gy + hh, z, 0, Math.PI / 2));
   addCollider(x - 0.27, gy, z - 0.27, x + 0.27, gy + 0.88, z + 0.27, 'metal');
 }
-function fireBarrel(x, z, light) {
+// a burning oil drum: live flames (built in buildFires) and its own flickering light
+function fireBarrel(x, z) {
   barrel(x, z, M.burnt); const gy = terrainY(x, z);
-  for (let i = 0; i < 3; i++) { const g = new THREE.PlaneGeometry(0.7, 1.1); G(g, M.flame, x, gy + 1.3, z, i * Math.PI / 3); }
-  if (light) MAP.lights.push({ x, y: gy + 1.5, z, color: 0xff8a3a, int: 1.6, dist: 16 });
+  MAP.fires.push({ x, y: gy + 0.86, z, size: 0.85, embers: 1 });
+  MAP.lights.push({ x, y: gy + 1.6, z, color: 0xff8030, int: 2.6, dist: 15 });
 }
 function crate(x, z, s = 1, y = null, yaw = 0) {
   const gy = y === null ? terrainY(x, z) : y;
@@ -1430,8 +1431,8 @@ function truck(x, z, alongX, flip = 1) {
 // a car still burning: flames in the cabin and engine bay, the one real light it brings
 function burningCar(x, z, yaw) {
   wreck(x, z, yaw, false); const gy = terrainY(x, z), c = Math.cos(yaw), s = Math.sin(yaw);
-  [[1.5, 0.95, 0.75], [0.1, 1.1, 0.85], [-1.3, 0.9, 0.55]].forEach(([u, hy, sz]) => { const px = x + c * u, pz = z - s * u; for (let i = 0; i < 2; i++) G(new THREE.PlaneGeometry(sz, sz * 1.5), M.flame, px + rr(-0.15, 0.15), gy + hy + sz * 0.45, pz + rr(-0.15, 0.15), i * Math.PI / 2 + rr(0, 0.5)); });   // small: additive + bloom adds up fast
-  MAP.lights.push({ x: x + c * 0.4, y: gy + 2.0, z: z - s * 0.4, color: 0xff7a2e, int: 2.0, dist: 18 });
+  [[1.5, 0.75, 0.9], [0.1, 0.9, 1.1], [-1.3, 0.7, 0.7]].forEach(([u, hy, sz]) => MAP.fires.push({ x: x + c * u, y: gy + hy, z: z - s * u, size: sz, embers: 1 }));
+  MAP.lights.push({ x: x + c * 0.4, y: gy + 2.0, z: z - s * 0.4, color: 0xff7a2e, int: 3.0, dist: 20 });
   const g = new THREE.PlaneGeometry(6.5, 4.2), uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, 0.5 + uv.getX(i) * 0.25, uv.getY(i) * 0.5);   // scorched ground (atlas cell 6)
   g.rotateX(-Math.PI / 2); g.rotateY(yaw); G(g, M.decal, x, gy + 0.09, z);
 }
@@ -1509,6 +1510,7 @@ function layout() {
 function buildMap(scene) {
   rng = makeRng(7151); drng = makeRng(4242); lrng = makeRng(6262); hrng = makeRng(5150); HIDES.length = LOOPS.length = 0;
   MAP.spawns.length = MAP.ammoSpots.length = MAP.plateSpots.length = MAP.nests.length = MAP.buildings.length = MAP.lights.length = MAP.stairs.length = MAP.doors.length = 0;
+  MAP.fires = [];
   WIRES.length = 0; TALL.length = 0; for (const k in FB) delete FB[k];
   SURF.d = new Uint8Array(SURF.n * SURF.n); SURF.blk = new Uint8Array(SURF.n * SURF.n); OCC.d.fill(0);
   mapTextures(); mapMaterials();
@@ -1727,11 +1729,64 @@ function buildMap(scene) {
     const E = MAP.half, T = 100; addCollider(-E - 2, -50, -E - 2, E + 2, T, -E, 'dirt', false); addCollider(-E - 2, -50, E, E + 2, T, E + 2, 'dirt', false); addCollider(-E - 2, -50, -E, -E, T, E, 'dirt', false); addCollider(E, -50, -E, E + 2, T, E, 'dirt', false); }
 
   staticBuild(scene); foliageBuild(scene); if (DU.tOcc.value) DU.tOcc.value.needsUpdate = true;
-  MAP.lights.forEach(L => { const pl = new THREE.PointLight(L.color, L.int, L.dist, 2); pl.position.set(L.x, L.y, L.z); scene.add(pl); L.obj = pl; });
+  MAP.lights.forEach(L => { const pl = new THREE.PointLight(L.color, L.int, L.dist, 1.6); pl.position.set(L.x, L.y, L.z); scene.add(pl); L.obj = pl; });
+  buildFires(scene);
   buildSpots(infos);
 }
-// optional: flicker the fire lights (main loop may call MAP.tick(time))
-MAP.tick = t => { MAP.lights.forEach((L, i) => { if (L.obj) L.obj.intensity = L.int * (0.8 + 0.2 * Math.sin(t * 13 + i * 3) * Math.sin(t * 7.3 + i)); });
+// ---------- Live fires: licking flame sprites, a soft glow, embers rising (one Points draw for every ember) ----------
+const FIRE = { embers: null, eN: 0 };
+function buildFires(scene) {
+  const glowTex = canvasTex(64, 64, (g, w, h) => { const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,190,110,0.9)'); gr.addColorStop(0.4, 'rgba(255,120,40,0.35)'); gr.addColorStop(1, 'rgba(255,80,20,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h); });
+  const emberTex = canvasTex(16, 16, (g, w, h) => { const gr = g.createRadialGradient(8, 8, 0, 8, 8, 8); gr.addColorStop(0, 'rgba(255,240,200,1)'); gr.addColorStop(0.5, 'rgba(255,150,50,0.8)'); gr.addColorStop(1, 'rgba(255,90,20,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h); });
+  const addMat = (map, color, op) => new THREE.SpriteMaterial({ map, color, transparent: true, opacity: op, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
+  const PER = 14, pos = new Float32Array(MAP.fires.length * PER * 3);
+  MAP.fires.forEach((f, fi) => {
+    const grp = new THREE.Group(); grp.position.set(f.x, f.y, f.z); scene.add(grp); f.grp = grp; f.tongues = [];
+    // 5 flame tongues, each on its own cycle: rise, stretch, thin out, start again
+    for (let i = 0; i < 5; i++) {
+      const sp = new THREE.Sprite(addMat(TX.flame, i ? 0xff9a48 : 0xffd090, 0.9)); sp.center.set(0.5, 0.05); grp.add(sp);
+      f.tongues.push({ sp, ph: i / 5 + Math.random() * 0.1, sp0: 1.3 + Math.random() * 0.8, ox: (Math.random() - 0.5) * 0.28 * f.size, oz: (Math.random() - 0.5) * 0.28 * f.size });
+    }
+    f.glow = new THREE.Sprite(addMat(glowTex, 0xff8a40, 0.55)); f.glow.position.y = 0.35 * f.size; f.glow.scale.setScalar(2.6 * f.size); grp.add(f.glow);
+    f.e0 = fi * PER; f.ePh = Array.from({ length: PER }, () => Math.random());
+  });
+  // embers for every fire in one draw call
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const pm = new THREE.PointsMaterial({ map: emberTex, color: 0xffb060, size: 0.09, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true, fog: false });
+  FIRE.embers = new THREE.Points(g, pm); FIRE.embers.frustumCulled = false; scene.add(FIRE.embers); FIRE.eN = MAP.fires.length * PER;
+}
+function fireTick(t) {
+  const cam = typeof CAMERA !== 'undefined' && CAMERA ? CAMERA.position : null;
+  MAP.fires.forEach((f, fi) => {
+    const near = !cam || Math.abs(cam.x - f.x) + Math.abs(cam.z - f.z) < 260;
+    f.grp.visible = near; if (!near) return;
+    const S = f.size;
+    f.tongues.forEach((k, i) => {
+      const p = (t * k.sp0 + k.ph) % 1, life = Math.sin(Math.PI * p);
+      const flick = 0.85 + 0.15 * Math.sin(t * 17 + i * 2.1 + fi);
+      k.sp.scale.set(S * (0.75 - 0.35 * p) * flick, S * (0.7 + 1.1 * life) * flick, 1);
+      k.sp.position.set(k.ox + Math.sin(t * 3.1 + i) * 0.06 * S, p * 0.25 * S, k.oz + Math.cos(t * 2.7 + i) * 0.06 * S);
+      k.sp.material.opacity = 0.95 * (1 - p * 0.7);
+      k.sp.material.rotation = Math.sin(t * 2 + i) * 0.12;
+    });
+    const fl = 0.8 + 0.2 * Math.sin(t * 11 + fi) * Math.sin(t * 6.3 + fi * 2);
+    f.glow.material.opacity = 0.5 * fl; f.glow.scale.setScalar(2.6 * S * (0.92 + 0.08 * fl));
+  });
+  // embers: rise with a wobble, drift downwind, fade, respawn at the fire
+  if (FIRE.embers) {
+    const a = FIRE.embers.geometry.attributes.position, arr = a.array;
+    MAP.fires.forEach(f => {
+      for (let j = 0; j < f.ePh.length; j++) {
+        const p = (t * 0.35 + f.ePh[j]) % 1, k = (f.e0 + j) * 3, sd = f.ePh[j] * 50;
+        arr[k] = f.x + Math.sin(sd + t * 1.7) * 0.25 * f.size + p * 0.9; arr[k + 1] = f.y + 0.3 + p * 3.2 * f.size; arr[k + 2] = f.z + Math.cos(sd + t * 1.3) * 0.25 * f.size + p * 0.4;
+        if (p > 0.92) arr[k + 1] = -999;   // burnt out
+      }
+    });
+    a.needsUpdate = true;
+  }
+}
+// main loop calls MAP.tick(time): flicker the fire lights, animate the flames
+MAP.tick = t => { fireTick(t); MAP.lights.forEach((L, i) => { if (L.obj) L.obj.intensity = L.int * (0.72 + 0.16 * Math.sin(t * 13 + i * 3) * Math.sin(t * 7.3 + i) + 0.12 * Math.sin(t * 29 + i)); });
   if (M.glowF) M.glowF.emissiveIntensity = 0.9 * (0.78 + 0.14 * Math.sin(t * 9.1) * Math.sin(t * 3.7 + 1) + 0.08 * Math.sin(t * 23));   // candles guttering
   if (M.lamp) M.lamp.emissiveIntensity = 1.1 * (0.9 + 0.1 * Math.sin(t * 11.3) * Math.sin(t * 4.1));
   if (TX.fogb) TX.fogb.offset.y = (t * 0.0035) % 1;   // the mist creeps down the creek

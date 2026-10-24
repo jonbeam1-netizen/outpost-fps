@@ -2,7 +2,8 @@
 // ---------- The local player: input, movement, camera, weapons, ballistics, first-person view ----------
 let CAMERA = null, VMCAM = null, VMSCENE = null;
 const INPUT = { keys: {}, pressed: {}, mouse: { l: false, r: false, lPressed: false, rPressed: false }, dx: 0, dy: 0, wheel: 0, locked: false };
-const R_PLAYER = 0.3, STEP = 0.48, GRAV = 18, BULLET_G = 9.81;
+// BULLET_G is game gravity for rounds, softer than real (9.81) so drop only bites past ~250 m; reticles, bots and the kill cam all use it
+const R_PLAYER = 0.3, STEP = 0.48, GRAV = 18, BULLET_G = 4.0;
 const STANCE = [   // height of the body box, eye height, move speed
   { h: 1.8, eye: 1.64, speed: 4.1 },
   { h: 1.25, eye: 1.1, speed: 2.1 },
@@ -310,9 +311,9 @@ function weaponTick(dt) {
   if (d.melee || PL.sprint || PL.equipT > 0.2 || PL.reloading || PL.cycleT > 0) PL.ads = false;
   if (!PL.ads && (PL.sprint || PL.reloading)) PL.adsToggle = false;
   const wasScoped = PL.scoped;
-  PL.adsT = clamp(PL.adsT + (PL.ads ? dt : -dt * 1.6) / d.adsTime, 0, 1);
+  PL.adsT = clamp(PL.adsT + (PL.ads ? dt : -dt * 1.6) / Math.max(0.05, (d.adsTime || 0) * 0.75), 0, 1) || 0;   // the knife's adsTime is 0: never divide by it   // a touch quicker than the guns' listed times
   PL.sprintT = clamp(PL.sprintT + (PL.sprint ? dt : -dt) * 5, 0, 1);
-  if (PL.adsT > 0.85 && !wasScoped && VM.gun && VM.gun.optic) SFX.scopeIn();
+  if (PL.adsT > 0.6 && PL.adsT - dt / Math.max(0.05, (d.adsTime || 0) * 0.75) <= 0.6 && PL.ads && VM.gun && VM.gun.optic) SFX.scopeIn();
   if (PL.adsT < 0.85 && wasScoped) SFX.scopeOut();
   // bolt cycling
   if (PL.cycleT > 0) {
@@ -394,10 +395,12 @@ function cameraTick(dt) {
   CAMERA.rotation.set(PL.pitch + PL.recoilP + PL.sy, PL.yaw + PL.recoilY + PL.sx, -lean * 0.14 + Math.sin(PL.bob) * 0.004 * bobAmt);
   // FOV: through a scope it's the magnification, otherwise a slight zoom for the pistol
   const opt = g && g.optic;
-  const scopeIn = !!(opt && PL.adsT > 0.85);
-  const fov = scopeIn ? scopeFov(w.zoom) : SETTINGS.fov * lerp(1, opt ? 0.85 : 0.82, PL.adsT) * (1 + PL.sprintT * 0.04);
-  if (Math.abs(CAMERA.fov - fov) > 0.01) { CAMERA.fov = scopeIn ? fov : lerp(CAMERA.fov, fov, 1 - Math.exp(-dt * 18)); CAMERA.updateProjectionMatrix(); }
-  PL.scoped = scopeIn;
+  // the scope comes up gradually: past halfway you start looking through the glass and the zoom eases in
+  const sa = opt ? smoothT((PL.adsT - 0.45) / 0.5) : 0;
+  const hipF = SETTINGS.fov * lerp(1, opt ? 0.9 : 0.82, PL.adsT) * (1 + PL.sprintT * 0.04);
+  const fov = sa > 0 ? Math.exp(lerp(Math.log(hipF), Math.log(scopeFov(w.zoom)), sa)) : hipF;
+  if (Math.abs(CAMERA.fov - fov) > 0.01) { CAMERA.fov = sa > 0 ? fov : lerp(CAMERA.fov, fov, 1 - Math.exp(-dt * 18)); CAMERA.updateProjectionMatrix(); }
+  PL.scopeA = sa; PL.scoped = sa > 0.97;
 }
 // ---------- First-person viewmodel ----------
 const VM = { root: null, pivot: null, gun: null, arms: [], flash: null, flashT: 0 };
@@ -435,12 +438,20 @@ function vmEject(big) {
   const p = new V3(); VM.gun.eject.getWorldPosition(p);
   fxBrass(VMSCENE, p, new V3(1, 0, 0.2), new V3(0, 1, 0), big);
 }
+const KNIFE_KEYS = [
+  [0, 0, 0, 0, 0, 0, 0],
+  [0.2, 0.1, 0.06, 0.04, -0.15, -0.55, 0.6],     // wound up: out to the right, blade laid back
+  [0.48, -0.32, -0.05, -0.14, -0.3, 1.05, -0.75], // the slash: across to the left, reaching forward
+  [0.62, -0.28, -0.07, -0.08, -0.2, 0.9, -0.6],   // follow-through
+  [1, 0, 0, 0, 0, 0, 0],
+];
 const _vp = new V3(), _wp = new V3(), _wq2 = new THREE.Quaternion(), _hintV = new V3();
 function vmTick(dt) {
   const w = curW(), g = VM.gun; if (!w || !g) return;
   const d = w.def, a = smoothT(PL.adsT), sp = PL.sprintT;
   const hip = d.hip || [0.14, -0.14, -0.5];
-  const px = lerp(hip[0], 0, a), py = lerp(hip[1], -g.sightY, a), pz = lerp(hip[2], -g.eyeZ, a);
+  // the pistol is held out at arm's length when aiming, so its back end doesn't fill the screen (sights stay on the line)
+  const px = lerp(hip[0], 0, a), py = lerp(hip[1], -g.sightY, a), pz = lerp(hip[2], -g.eyeZ - (d.pistol ? 0.22 : 0), a);
   let rx = 0, ry = lerp(0.03, 0, a), rz = lerp(0.02, 0, a), ox = 0, oy = 0, oz = 0;
   const hr = d.hipRot; if (hr) { rx += hr[0] * (1 - a); ry += hr[1] * (1 - a); rz += hr[2] * (1 - a); }
   // bob and sway
@@ -457,10 +468,12 @@ function vmTick(dt) {
   const kk = PL.kick;
   oz += kk * (d.pistol ? 0.03 : 0.06); rx += kk * (d.pistol ? 0.12 : 0.06) * (1 - a * 0.4); oy += kk * 0.004;
   oy -= PL.equipT * 0.6; rx -= PL.equipT * 1.2;
-  // knife: a fast forward stab with a twist
+  // knife: cock it back to the right, rip across to the left, recover (keys: u, ox, oy, oz, rx, ry, rz)
   if (d.melee && PL.meleeT > 0) {
-    const u = 1 - PL.meleeT / 0.55, s = u < 0.3 ? smoothT(u / 0.3) : 1 - smoothT((u - 0.3) / 0.7);
-    oz -= 0.32 * s; ox -= 0.12 * s; oy += 0.05 * s; rx -= 0.5 * s; ry += 0.6 * s; rz -= 0.4 * s;
+    const u = 1 - PL.meleeT / 0.55;
+    let k = 0; while (k < KNIFE_KEYS.length - 2 && u > KNIFE_KEYS[k + 1][0]) k++;
+    const A = KNIFE_KEYS[k], B = KNIFE_KEYS[k + 1], f = smoothT((u - A[0]) / (B[0] - A[0])), L = i => lerp(A[i], B[i], f);
+    ox += L(1); oy += L(2); oz += L(3); rx += L(4); ry += L(5); rz += L(6);
   }
   // reload: tilt the gun, drop the mag and bring a new one up
   let magDrop = 0;
@@ -485,7 +498,7 @@ function vmTick(dt) {
   if (g.bolt) { g.bolt.rotation.z = boltRot * 1.1; g.bolt.position.z = boltBack * 0.1; }
   if (g.slide) g.slide.position.z = PL.slideLocked ? 0.035 : PL.slideT * 0.035;
   // through the scope the model would only get in the way
-  VM.root.visible = !PL.scoped;
+  VM.root.visible = !(g.optic && PL.scopeA > 0.35);   // hand over to the scope view once it's mostly up
   // arms: IK to the grip and the support hand
   VM.root.updateMatrixWorld(true);
   g.group.updateMatrixWorld(true);
@@ -502,7 +515,7 @@ function vmTick(dt) {
     if (arm.side > 0 && mk === g.boltKnob) arm.hand.rotateX(-0.8);
     if (mk === g.boltKnob) _vp.set(0.005, -0.02, 0.05); else _vp.set(arm.side > 0 ? 0.015 : 0, -0.045 * (arm.side > 0 ? 1 : -1), 0.07);   // close the hand on the bolt knob
     _vp.applyQuaternion(arm.hand.quaternion).add(_wp);
-    const shoulder = new V3(arm.side * 0.24, -0.36, 0.08);
+    const shoulder = d.pistol ? new V3(arm.side * lerp(0.24, 0.17, a), lerp(-0.36, -0.5, a), lerp(0.08, -0.12, a)) : new V3(arm.side * 0.24, -0.36, 0.08);   // arms out straight for the pistol, below the sight line
     solve2(arm.upper, arm.lower, shoulder, _vp, _hintV.set(arm.side * 1.2, -1, 0.3).normalize(), arm.la, arm.lb, true);
   });
   if (VM.flashT > 0 && g.muzzle) { VM.flashT -= dt; g.muzzle.getWorldPosition(VM.flash.position); VM.flash.visible = true; VM.flashLight.position.copy(VM.flash.position); VM.flashLight.intensity = 4; }

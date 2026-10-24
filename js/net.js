@@ -242,15 +242,17 @@ function remotesTick(dt) {
       // footsteps when a foot comes down
       if (st.alive && Math.floor(r.op.phase / Math.PI) !== Math.floor(ph0 / Math.PI) && r.op.speed > 0.8) SFX.step(st.pos, surfaceAt(st.pos.x, st.pos.z, st.pos.y), [0.8, 0.4, 0.25][st.stance || 0] * (st.sprint ? 1.5 : 1));
       // a scope pointed at you catches the light
-      if (st.alive && st.ads && r.wid && WEAPONS[r.wid] && !WEAPONS[r.wid].pistol && !WEAPONS[r.wid].melee) remoteGlint(st);
+      if (st.alive && st.ads && r.wid && WEAPONS[r.wid] && !WEAPONS[r.wid].pistol && !WEAPONS[r.wid].melee) remoteGlint(st, r.op);
     }
   });
 }
 const _glp = new V3();
-function remoteGlint(st) {
+function remoteGlint(st, op) {
   const fx = -Math.sin(st.yaw) * Math.cos(st.pitch), fy = Math.sin(st.pitch), fz = -Math.cos(st.yaw) * Math.cos(st.pitch);
-  const eh = [1.6, 1.1, 0.38][st.stance || 0];
-  _glp.set(st.pos.x + fx * 0.35, st.pos.y + eh, st.pos.z + fz * 0.35);
+  // on the scope's front lens if we have their gun model, otherwise just in front of their face
+  const g = op && op.gun;
+  if (g && g.group && op.root.visible) { _glp.set(0, g.sightY || 0.1, -((g.eyeZ || 0.2) + 0.3)); g.group.localToWorld(_glp); }
+  else { const eh = [1.6, 1.1, 0.38][st.stance || 0]; _glp.set(st.pos.x + fx * 0.6, st.pos.y + eh, st.pos.z + fz * 0.6); }
   const tx = CAMERA.position.x - _glp.x, ty = CAMERA.position.y - _glp.y, tz = CAMERA.position.z - _glp.z, L = Math.hypot(tx, ty, tz);
   if (L < 8) return;
   const dot = (tx * fx + ty * fy + tz * fz) / L;

@@ -316,12 +316,14 @@ function hudVitals() {
 let _scW = 0, _scH = 0, _scWas = false, _rngT = 0, _rng = 0;
 function drawScope(dt) {
   const cv = $('scope'), g = VM.gun, w = curW();
-  const on = PL.alive && PL.scoped && g && g.optic;
+  const sa = PL.scopeA || 0, on = PL.alive && sa > 0.01 && g && g.optic;
   if (!on) { if (_scWas) { cv.getContext('2d').clearRect(0, 0, cv.width, cv.height); $('scopeInfo').style.opacity = 0; _scWas = false; } return; }
   _scWas = true;
   const W = window.innerWidth, H = window.innerHeight;
   if (W !== _scW || H !== _scH) { cv.width = W; cv.height = H; _scW = W; _scH = H; }
-  const c = cv.getContext('2d'), cx = W / 2, cy = H / 2, R = Math.min(W, H) * 0.47;
+  // while it comes up the tube closes in from the screen edges and the view fades through
+  const c = cv.getContext('2d'), cx = W / 2, cy = H / 2, R = lerp(Math.hypot(W, H) * 0.62, Math.min(W, H) * 0.47, smoothT(sa));
+  cv.style.opacity = clamp(sa * 1.6, 0, 1);
   const ppr = (H / 2) / Math.tan(CAMERA.fov * Math.PI / 360), mil = ppr * 0.001;   // pixels per milliradian
   c.clearRect(0, 0, W, H);
   // tube: black outside, a soft dark ring at the edge of the glass (the eyebox shifts a little with sway)
@@ -411,7 +413,9 @@ function hudTick(dt) {
   const gap = w && w.def.melee ? 3 : (w && w.def.pistol ? 7 : 22) * (moving > 1 ? 1.5 : 1) * (PL.onGround ? 1 : 2);
   const ci = ch.children;
   ci[0].style.top = (-gap - 7) + 'px'; ci[1].style.top = gap + 'px'; ci[2].style.left = (-gap - 7) + 'px'; ci[3].style.left = gap + 'px';
-  ch.style.opacity = PL.alive ? clamp(1 - PL.adsT * 2, 0, 1) * (PL.sprintT > 0.5 ? 0.3 : 1) : 0;
+  const pistolAim = w && w.def.pistol && PL.adsT > 0.5;   // aiming the Deagle: just a small dot on the front sight
+  ch.classList.toggle('dotOnly', !!pistolAim);
+  ch.style.opacity = PL.alive ? (pistolAim ? 0.9 : clamp(1 - PL.adsT * 2, 0, 1) * (PL.sprintT > 0.5 ? 0.3 : 1)) : 0;
   drawScope(dt);
   SFX.heartbeat(PL.alive && PL.hp <= 25 ? 1 : 0);
   // hit marker, vignette, damage arcs, feed, centre message
