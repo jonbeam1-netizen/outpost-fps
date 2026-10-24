@@ -3,85 +3,140 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Outpost — Deathmatch</title>
+<title>Holdover — Sniper Deathmatch</title>
+<meta name="theme-color" content="#0b0c0b">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Saira+Stencil+One&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <canvas id="view"></canvas>
+<div id="grain"></div>
 
 <!-- ===== In-game HUD ===== -->
 <div id="hud" hidden>
+  <canvas id="scope"></canvas>
+  <div id="scopeInfo">
+    <div><small>MAG</small><span id="scopeZoom"></span></div>
+    <div><small>LRF</small><span id="scopeRange"></span></div>
+    <div><small>HOLD</small><span id="scopeHold"></span></div>
+  </div>
   <div id="crosshair"><i></i><i></i><i></i><i></i><b></b></div>
   <div id="hitmarker"><i></i><i></i><i></i><i></i></div>
-  <div id="scopeOverlay"><div class="ring"></div><div class="h"></div><div class="v"></div></div>
   <div id="dmgDir"></div>
   <div id="vignette"></div>
-  <div id="killfeed"></div>
-  <div id="codeTag"></div>
-  <div id="hint"></div>
-  <div id="targetName"></div>
-  <div id="bottomLeft">
-    <div id="hpBar"><div id="hpFill"></div><span id="hpText">100</span></div>
+  <div id="killfeed" aria-live="polite"></div>
+  <div id="topLeft">
+    <div id="codeTag"></div>
     <div id="kd">K 0 · D 0</div>
   </div>
+  <div id="targetName"></div>
+  <div id="bottomLeft">
+    <div id="plates" title="Armor plates"></div>
+    <div id="hearts" title="Health"></div>
+    <div id="stance"></div>
+  </div>
   <div id="bottomRight">
-    <div id="weaponName">M4A1</div>
-    <div id="ammo"><span id="ammoMag">30</span><span id="ammoRes">/ 150</span></div>
-    <div id="fireMode">AUTO</div>
+    <div id="weaponName">AWM</div>
+    <div id="ammo"><span id="ammoMag">5</span><span id="ammoRes">/ 20</span></div>
+    <div id="ammoPips"></div>
+    <div id="fireMode">BOLT</div>
   </div>
   <div id="centerMsg"></div>
-  <div id="cmdBox" hidden><input id="cmdIn" maxlength="120" autocomplete="off" spellcheck="false" placeholder="Chat, or /addbot  /removebot  /botdiff  /help"></div>
-  <div id="scoreboard" hidden><h3>SCOREBOARD <span id="sbMode">FREE-FOR-ALL</span></h3><table><thead><tr><th>Operator</th><th>K</th><th>D</th><th>K/D</th></tr></thead><tbody id="sbBody"></tbody></table></div>
+  <div id="cmdBox" hidden><label for="cmdIn">SAY</label><input id="cmdIn" maxlength="120" autocomplete="off" spellcheck="false" placeholder="Chat, or /addbot  /removebot  /botdiff  /help"></div>
+  <div id="scoreboard" hidden><h3>SCOREBOARD <span id="sbMode">FREE-FOR-ALL</span></h3><table><thead><tr><th>Sniper</th><th>K</th><th>D</th><th>K/D</th></tr></thead><tbody id="sbBody"></tbody></table></div>
   <div id="deathScreen" hidden>
-    <div class="dsTitle">KILLED</div>
-    <div id="dsBy"></div>
-    <div id="dsTimer"></div>
-    <div class="dsSmall">Change your loadout from the pause menu (Esc)</div>
+    <div class="dsCard">
+      <div class="dsTitle">KILLED</div>
+      <div id="dsBy"></div>
+      <div class="dsBar"><i id="dsBarFill"></i></div>
+      <div id="dsTimer"></div>
+      <div class="dsSmall">Esc → Loadout to change rifle before you go back in</div>
+    </div>
   </div>
+  <div id="hint"></div>
 </div>
 
 <!-- ===== Main menu ===== -->
 <div id="menu" class="overlay">
+  <div class="menuFx" aria-hidden="true"><i class="dusk"></i><i class="ember"></i><i class="glint"></i><i class="bars"></i></div>
   <div class="menuWrap">
-    <div class="brand">
-      <div class="logo">OUTPOST</div>
-      <div class="sub">DEATHMATCH · PEER-TO-PEER · 2–10 OPERATORS</div>
-    </div>
+    <header class="brand">
+      <h1 class="logo" aria-label="Holdover"><span aria-hidden="true">HOLD</span><svg class="reticleO" viewBox="0 0 100 100" aria-hidden="true">
+          <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" stroke-width="13"/>
+          <path d="M50 2v26M50 72v26M2 50h26M72 50h26" stroke="currentColor" stroke-width="3"/>
+          <path d="M44 59h12M46 66h8M47.5 73h5" stroke="var(--red)" stroke-width="2.4"/>
+          <circle cx="50" cy="50" r="2.6" fill="var(--red)"/>
+        </svg><span aria-hidden="true">VER</span></h1>
+      <svg class="dropScale" viewBox="0 0 600 34" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M0 6H600" stroke="currentColor" stroke-width="1" opacity=".5"/>
+        <path d="M0 6v8M100 6v8M200 6v12M300 6v8M400 6v12M500 6v8M600 6v12M50 6v4M150 6v4M250 6v4M350 6v4M450 6v4M550 6v4" stroke="currentColor" stroke-width="1.2"/>
+        <path d="M0 9 C 180 9, 380 13, 600 30" fill="none" stroke="var(--red)" stroke-width="1.4" stroke-dasharray="3 5"/>
+      </svg>
+      <div class="sub"><span>SNIPER DEATHMATCH</span><span>RUINED HILL TOWN · DUSK</span><span>2–10 PLAYERS · PEER-TO-PEER</span></div>
+    </header>
     <div class="menuGrid">
-      <section class="panel">
-        <h2>Operator</h2>
-        <label>Callsign <input id="nameIn" maxlength="14" placeholder="Callsign"></label>
-        <div class="label">Outfit</div>
-        <div id="outfitPick" class="swatches"></div>
-        <h2 class="mt">Play</h2>
-        <button id="btnHost" class="primary">HOST GAME</button>
-        <div class="joinRow">
-          <input id="codeIn" placeholder="DM-XXXX" maxlength="7">
-          <button id="btnJoin">JOIN</button>
-        </div>
-        <div id="netStatus" class="status"></div>
-        <button id="btnSettings" class="ghost mt">SETTINGS</button>
-        <div class="controls">
-          <b>WASD</b> move · <b>Shift</b> sprint · <b>C</b> crouch · <b>Space</b> jump<br>
-          <b>Q / E</b> lean · <b>RMB</b> aim · <b>R</b> reload · <b>B</b> fire mode<br>
-          <b>1 / 2</b> or wheel swap · <b>Tab</b> scores · <b>Esc</b> pause<br>
-          <b>Enter</b> chat &amp; commands: <b>/addbot 3</b> · <b>/removebot</b> · <b>/removebot all</b>
-        </div>
-      </section>
+      <div id="menuLeft" class="col">
+        <section class="panel">
+          <h2><span class="idx">01</span>Sniper</h2>
+          <label class="field">Callsign <input id="nameIn" maxlength="14" placeholder="Callsign" autocomplete="off" spellcheck="false"></label>
+          <div class="label" id="outfitLbl">Ghillie suit <b id="outfitName"></b></div>
+          <div id="outfitPick" class="suits" role="group" aria-labelledby="outfitLbl"></div>
+        </section>
+        <section class="panel deploy">
+          <h2><span class="idx">02</span>Deploy</h2>
+          <button id="btnHost" class="primary big">HOST GAME<small>Get a code like DM-7K2F to share</small></button>
+          <div class="or"><span>or join a friend</span></div>
+          <div class="joinRow">
+            <input id="codeIn" placeholder="DM-XXXX" maxlength="7" aria-label="Game code" autocomplete="off" spellcheck="false">
+            <button id="btnJoin">JOIN</button>
+          </div>
+          <div id="netStatus" class="status" role="status" aria-live="polite"></div>
+          <div class="row2">
+            <button id="btnPractice" class="ghost" title="Play alone with bots">PRACTICE</button>
+            <button id="btnSettings" class="ghost">SETTINGS</button>
+          </div>
+        </section>
+      </div>
       <section class="panel loadout">
-        <h2>Loadout</h2>
-        <div id="gunList" class="gunList"></div>
+        <h2><span class="idx">03</span>Loadout</h2>
+        <div id="gunList" class="gunList" role="group" aria-label="Rifle"></div>
         <div class="gunDetail">
-          <canvas id="gunPreview" width="640" height="300"></canvas>
-          <div id="gunTitle" class="gunTitle"></div>
-          <div id="gunDesc" class="gunDesc"></div>
-          <div id="modSlots" class="modSlots"></div>
-          <div id="gunStats" class="stats"></div>
-          <div class="secondary">Secondary: <b>Glock 17</b> <select id="glockMuzzle"><option value="none">No muzzle device</option><option value="supp">Suppressor</option></select></div>
+          <div class="previewBox">
+            <canvas id="gunPreview" width="640" height="300" aria-hidden="true"></canvas>
+            <span class="pvTag tl">BENCH</span><span class="pvTag br" id="gunCal"></span>
+          </div>
+          <div class="gunInfo">
+            <div id="gunTitle" class="gunTitle"></div>
+            <div id="gunDesc" class="gunDesc"></div>
+            <div id="modSlots" class="modSlots"></div>
+            <div id="gunStats" class="stats"></div>
+          </div>
+          <div id="gunSide" class="secondary"></div>
         </div>
       </section>
+      <details class="panel manual" open>
+        <summary><span class="idx">04</span>Field manual</summary>
+        <div class="keys">
+          <div><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span>move</div>
+          <div><span><kbd>Shift</kbd></span>sprint</div>
+          <div><span><kbd>C</kbd></span>crouch</div>
+          <div><span><kbd>Z</kbd></span>prone</div>
+          <div><span><kbd>Space</kbd></span>jump / stand</div>
+          <div><span><kbd>Q</kbd><kbd>E</kbd></span>lean</div>
+          <div><span><kbd>RMB</kbd></span>scope</div>
+          <div><span><kbd>Wheel</kbd></span>zoom (scoped)</div>
+          <div><span><kbd>LMB</kbd></span>fire / stab</div>
+          <div><span><kbd>R</kbd></span>reload</div>
+          <div><span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span>rifle · Deagle · knife</div>
+          <div><span><kbd>V</kbd></span>quick knife</div>
+          <div><span><kbd>Tab</kbd></span>scores</div>
+          <div><span><kbd>Esc</kbd></span>pause</div>
+          <div><span><kbd>Enter</kbd></span>chat &amp; commands</div>
+        </div>
+        <p class="tips">Rifles are zeroed at 100 m — hold over for range, use the scope's laser readout. Stay in the grass, a scope glints. Commands: <code>/addbot 3</code> <code>/removebot all</code> <code>/botdiff hard</code></p>
+      </details>
     </div>
   </div>
 </div>
@@ -90,12 +145,12 @@
 <div id="pause" class="overlay" hidden>
   <div class="pauseBox">
     <h2>PAUSED</h2>
-    <div id="pauseCode" class="pauseCode"></div>
+    <button id="pauseCode" class="pauseCode" type="button"></button>
     <button id="btnResume" class="primary">RESUME</button>
     <button id="btnLoadout">LOADOUT</button>
-    <div class="botRow"><button id="btnAddBot">+ BOT</button><button id="btnRemoveBot">− BOT</button><select id="botDiff"><option value="easy">Easy bots</option><option value="normal" selected>Normal bots</option><option value="hard">Hard bots</option></select></div>
+    <div class="botRow"><button id="btnAddBot" aria-label="Add a bot">+ BOT</button><button id="btnRemoveBot" aria-label="Remove a bot">− BOT</button><select id="botDiff" aria-label="Bot difficulty"><option value="easy">Easy bots</option><option value="normal" selected>Normal bots</option><option value="hard">Hard bots</option></select></div>
     <button id="btnPauseSettings">SETTINGS</button>
-    <button id="btnLeave" class="ghost">LEAVE GAME</button>
+    <button id="btnLeave" class="ghost danger">LEAVE GAME</button>
   </div>
 </div>
 
@@ -103,21 +158,26 @@
 <div id="settings" class="overlay" hidden>
   <div class="pauseBox wide">
     <h2>SETTINGS</h2>
-    <div class="setRow"><span>Master volume</span><input type="range" id="sVol" min="0" max="100" step="1"><output id="oVol"></output></div>
-    <div class="setRow"><span>Mouse sensitivity</span><input type="range" id="sSens" min="0.1" max="3" step="0.05"><output id="oSens"></output></div>
-    <div class="setRow"><span>Aim sensitivity</span><input type="range" id="sAds" min="0.2" max="1.5" step="0.05"><output id="oAds"></output></div>
-    <div class="setRow"><span>Field of view</span><input type="range" id="sFov" min="65" max="105" step="1"><output id="oFov"></output></div>
-    <div class="setRow"><span>Shadows</span><select id="sShadow"><option value="0">Off</option><option value="1">Low</option><option value="2">High</option></select></div>
-    <div class="setRow"><span>Render scale</span><select id="sScale"><option value="0.6">60%</option><option value="0.8">80%</option><option value="1">100%</option><option value="1.5">150%</option></select></div>
-    <div class="setRow"><span>Grass</span><select id="sGrass"><option value="0">Off</option><option value="1">On</option></select></div>
-    <div class="setRow"><span>Aim mode</span><select id="sAimMode"><option value="hold">Hold</option><option value="toggle">Toggle</option></select></div>
-    <div class="setRow"><span>Fullscreen</span><select id="sFull"><option value="1">On (blocks Ctrl+W)</option><option value="0">Off</option></select></div>
-    <div class="setRow"><span>Invert mouse Y</span><select id="sInvert"><option value="0">No</option><option value="1">Yes</option></select></div>
+    <h3>Audio</h3>
+    <div class="setRow"><label for="sVol">Master volume</label><input type="range" id="sVol" min="0" max="100" step="1"><output id="oVol" for="sVol"></output></div>
+    <h3>Controls</h3>
+    <div class="setRow"><label for="sSens">Mouse sensitivity</label><input type="range" id="sSens" min="0.1" max="3" step="0.05"><output id="oSens" for="sSens"></output></div>
+    <div class="setRow"><label for="sAds">Scope sensitivity</label><input type="range" id="sAds" min="0.2" max="1.5" step="0.05"><output id="oAds" for="sAds"></output></div>
+    <div class="setRow"><label for="sAimMode">Aim mode</label><select id="sAimMode"><option value="hold">Hold</option><option value="toggle">Toggle</option></select></div>
+    <div class="setRow"><label for="sInvert">Invert mouse Y</label><select id="sInvert"><option value="0">No</option><option value="1">Yes</option></select></div>
+    <h3>Display</h3>
+    <div class="setRow"><label for="sFov">Field of view (vertical)</label><input type="range" id="sFov" min="55" max="95" step="1"><output id="oFov" for="sFov"></output></div>
+    <div class="setRow"><label for="sFull">Fullscreen</label><select id="sFull"><option value="1">On (blocks Ctrl+W)</option><option value="0">Off</option></select></div>
+    <div class="setRow"><label for="sShadow">Shadows</label><select id="sShadow"><option value="0">Off</option><option value="1">Low</option><option value="2">High</option></select></div>
+    <div class="setRow"><label for="sScale">Render scale</label><select id="sScale"><option value="0.6">60%</option><option value="0.8">80%</option><option value="1">100%</option><option value="1.5">150%</option></select></div>
+    <div class="setRow"><label for="sPost">Post-processing</label><select id="sPost"><option value="1">High</option><option value="2">Low</option><option value="0">Off</option></select></div>
+    <div class="setRow"><label for="sGrass">Grass</label><select id="sGrass"><option value="0">Off</option><option value="1">On</option></select></div>
+    <div class="setRow"><label for="sGrain">Film grain</label><select id="sGrain"><option value="0">Off</option><option value="1">On</option></select></div>
     <button id="btnSetBack" class="primary">BACK</button>
   </div>
 </div>
 
-<div id="loading" class="overlay"><div class="loadTxt">BUILDING THE OUTPOST…</div></div>
+<div id="loading" class="overlay"><div class="loadTxt"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" stroke-width="4"/><path d="M50 4v30M50 66v30M4 50h30M66 50h30" stroke="currentColor" stroke-width="2"/></svg>SETTING UP THE TOWN…</div></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
@@ -130,6 +190,10 @@
 <script src="js/player.js"></script>
 <script src="js/net.js"></script>
 <script src="js/bots.js"></script>
+<script src="js/pickups.js"></script>
+<script src="js/wildlife.js"></script>
+<script src="js/post.js"></script>
+<script src="js/killcam.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/main.js"></script>
 </body>

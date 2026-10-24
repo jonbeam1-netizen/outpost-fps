@@ -277,12 +277,36 @@ function addCollider(x0, y0, z0, x1, y1, z1, mat = 'concrete', bullets = true, s
   const c = { x0: Math.min(x0, x1), y0: Math.min(y0, y1), z0: Math.min(z0, z1), x1: Math.max(x0, x1), y1: Math.max(y0, y1), z1: Math.max(z0, z1), mat, bullets, solid };
   COLL.push(c); return c;
 }
-// Ray vs all colliders: returns {t, n:[nx,ny,nz], c} of the nearest hit within maxT
+// ---------- Broadphase: colliders bucketed into an 8 m grid, so queries only look at what's nearby ----------
+const CG = { cs: 8, n: 0, x0: 0, cells: null, stamp: 1 };
+function collGridBuild(half) {
+  const cs = CG.cs, x0 = -half - 40, n = Math.ceil((half + 40) * 2 / cs), cells = Array.from({ length: n * n }, () => []);
+  const ci = v => clamp(Math.floor((v - x0) / cs), 0, n - 1);
+  COLL.forEach(c => { c._s = 0; for (let j = ci(c.z0); j <= ci(c.z1); j++) for (let i = ci(c.x0); i <= ci(c.x1); i++) cells[j * n + i].push(c); });
+  Object.assign(CG, { n, x0, cells });
+}
+const _cq = [];
+// colliders whose cells touch the box [x0,x1]x[z0,z1] (each once); returns a shared array
+function collNear(x0, z0, x1, z1, keep = false) {
+  if (!keep) { _cq.length = 0; CG.stamp++; }
+  if (!CG.cells) { if (!_cq.length) for (const c of COLL) _cq.push(c); return _cq; }
+  const cs = CG.cs, n = CG.n, st = CG.stamp;
+  const i0 = clamp(Math.floor((x0 - CG.x0) / cs), 0, n - 1), i1 = clamp(Math.floor((x1 - CG.x0) / cs), 0, n - 1);
+  const j0 = clamp(Math.floor((z0 - CG.x0) / cs), 0, n - 1), j1 = clamp(Math.floor((z1 - CG.x0) / cs), 0, n - 1);
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const cell = CG.cells[j * n + i]; for (let k = 0; k < cell.length; k++) { const c = cell[k]; if (c._s !== st) { c._s = st; _cq.push(c); } } }
+  return _cq;
+}
+// Ray vs colliders: returns {t, n:[nx,ny,nz], c} of the nearest hit within maxT. Walks the grid in short segments.
 function rayWorld(o, d, maxT, forBullets = true) {
   let best = maxT, bn = null, bc = null;
   const ix = 1 / (d.x || 1e-9), iy = 1 / (d.y || 1e-9), iz = 1 / (d.z || 1e-9);
-  for (let i = 0; i < COLL.length; i++) {
-    const c = COLL[i];
+  const seg = CG.cells ? CG.cs * 0.75 : maxT;
+  _cq.length = 0; CG.stamp++;
+  for (let t0 = 0; t0 < best; t0 += seg) {
+    const t1 = Math.min(best, t0 + seg), ax = o.x + d.x * t0, az = o.z + d.z * t0, bx = o.x + d.x * t1, bz = o.z + d.z * t1;
+    const from = _cq.length; collNear(Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz), true);
+  for (let i = from; i < _cq.length; i++) {
+    const c = _cq[i];
     if (forBullets && !c.bullets) continue;
     let t1 = (c.x0 - o.x) * ix, t2 = (c.x1 - o.x) * ix;
     let tmin = Math.min(t1, t2), tmax = Math.max(t1, t2), ax = 0;
@@ -297,7 +321,40 @@ function rayWorld(o, d, maxT, forBullets = true) {
     best = tmin; bc = c;
     bn = ax === 0 ? [-Math.sign(d.x), 0, 0] : ax === 1 ? [0, -Math.sign(d.y), 0] : [0, 0, -Math.sign(d.z)];
   }
+    if (best <= t1) break;   // a hit inside this stretch beats anything further on
+  }
+  // the ground itself (map.js heightfield)
+  if (typeof rayTerrain === 'function') {
+    const tt = rayTerrain(o, d, best);
+    if (tt >= 0 && tt < best) { const x = o.x + d.x * tt, z = o.z + d.z * tt; return { t: tt, n: terrainNormal(x, z), c: TERRAIN_C }; }
+  }
   return bc ? { t: best, n: bn, c: bc } : null;
+}
+const TERRAIN_C = { mat: 'dirt', terrain: true, bullets: true, solid: true };
+function terrainNormal(x, z) {
+  const e = 0.5, hx = terrainY(x + e, z) - terrainY(x - e, z), hz = terrainY(x, z + e) - terrainY(x, z - e);
+  const l = Math.hypot(hx, 2 * e, hz); return [-hx / l, 2 * e / l, -hz / l];
+}
+const groundY = (x, z) => typeof terrainY === 'function' ? terrainY(x, z) : 0;
+// Ray vs foliage volumes only (bots use it for line of sight: you can hide in a bush)
+function rayFoliage(o, d, maxT) {
+  const ix = 1 / (d.x || 1e-9), iy = 1 / (d.y || 1e-9), iz = 1 / (d.z || 1e-9);
+  let depth = 0;
+  const ex = o.x + d.x * maxT, ez = o.z + d.z * maxT, list = collNear(Math.min(o.x, ex), Math.min(o.z, ez), Math.max(o.x, ex), Math.max(o.z, ez));
+  for (let i = 0; i < list.length; i++) {
+    const c = list[i]; if (c.mat !== 'foliage') continue;
+    let t1 = (c.x0 - o.x) * ix, t2 = (c.x1 - o.x) * ix, tmin = Math.min(t1, t2), tmax = Math.max(t1, t2);
+    t1 = (c.y0 - o.y) * iy; t2 = (c.y1 - o.y) * iy; tmin = Math.max(tmin, Math.min(t1, t2)); tmax = Math.min(tmax, Math.max(t1, t2));
+    t1 = (c.z0 - o.z) * iz; t2 = (c.z1 - o.z) * iz; tmin = Math.max(tmin, Math.min(t1, t2)); tmax = Math.min(tmax, Math.max(t1, t2));
+    tmin = Math.max(tmin, 0); tmax = Math.min(tmax, maxT);
+    if (tmax > tmin) depth += tmax - tmin;
+  }
+  return depth;   // metres of leaves the ray passes through
+}
+function inFoliage(x, y, z) {
+  const list = collNear(x, z, x, z);
+  for (let i = 0; i < list.length; i++) { const c = list[i]; if (c.mat === 'foliage' && x > c.x0 && x < c.x1 && y > c.y0 && y < c.y1 && z > c.z0 && z < c.z1) return true; }
+  return false;
 }
 // Ray vs sphere / vertical capsule (for player hitboxes)
 function raySphere(o, d, cx, cy, cz, r) {

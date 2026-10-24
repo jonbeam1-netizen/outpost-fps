@@ -1,0 +1,148 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gun inspector</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #23262a; color: #ddd; font: 13px/1.4 system-ui, sans-serif; overflow: hidden; }
+  #ui { position: fixed; left: 10px; top: 10px; background: rgba(0,0,0,0.55); padding: 10px; border-radius: 6px; z-index: 2; max-width: 300px; }
+  #ui label { display: block; margin: 3px 0; }
+  #ui select { width: 170px; }
+  #ui button { margin: 2px 1px; }
+  #info { margin-top: 6px; white-space: pre; font-family: monospace; font-size: 11px; color: #bcd; }
+  canvas { display: block; }
+  input[type=range] { width: 150px; vertical-align: middle; }
+</style>
+</head>
+<body>
+<div id="ui">
+  <label>Weapon <select id="w"></select></label>
+  <label>Optic <select id="optic"></select></label>
+  <label>Muzzle <select id="muzzle"></select></label>
+  <label>Under <select id="under"></select></label>
+  <div>
+    <button data-v="right">Right</button><button data-v="left">Left</button><button data-v="top">Top</button><button data-v="front">Front</button>
+    <button data-v="q1">3/4 front</button><button data-v="q2">3/4 rear</button><button data-v="ads">ADS eye</button><button data-v="hip">Hip</button>
+  </div>
+  <label><input type="checkbox" id="spin"> Turntable</label>
+  <label><input type="checkbox" id="marks"> Markers</label>
+  <label>Bolt lift <input type="range" id="bR" min="0" max="1.3" step="0.01" value="0"></label>
+  <label>Bolt back <input type="range" id="bZ" min="0" max="0.13" step="0.001" value="0"></label>
+  <label>Slide / CH <input type="range" id="sZ" min="0" max="0.06" step="0.001" value="0"></label>
+  <label>Mag drop <input type="range" id="mY" min="0" max="0.25" step="0.001" value="0"></label>
+  <div id="info"></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>document.write(`<script src="../js/util.js?v=${Date.now()}"><\/script><script src="../js/guns.js?v=${Date.now()}"><\/script>`);</script>
+<script>
+'use strict';
+buildTextures(); gunMats();
+const R = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+R.outputEncoding = THREE.sRGBEncoding; R.toneMapping = THREE.ACESFilmicToneMapping; R.toneMappingExposure = 1.05;
+R.shadowMap.enabled = true; R.shadowMap.type = THREE.PCFSoftShadowMap;
+R.setPixelRatio(Math.min(2, devicePixelRatio)); document.body.appendChild(R.domElement);
+const SC = new THREE.Scene(); SC.background = new THREE.Color(0x2b2f34);
+const CAM = new THREE.PerspectiveCamera(30, 1, 0.01, 50);
+SC.add(new THREE.HemisphereLight(0xb8c4d0, 0x4a4238, 0.9));
+const sun = new THREE.DirectionalLight(0xfff2e0, 1.6); sun.position.set(1.5, 3, 2); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -1.2, right: 1.2, top: 1.2, bottom: -1.2, near: 0.1, far: 10 }); sun.shadow.bias = -0.0004; SC.add(sun);
+const fill = new THREE.DirectionalLight(0xc0d0ff, 0.45); fill.position.set(-2, 1, -1.5); SC.add(fill);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), new THREE.MeshStandardMaterial({ color: 0x3a3c3e, roughness: 0.95 }));
+ground.rotation.x = -Math.PI / 2; ground.position.y = -0.25; ground.receiveShadow = true; SC.add(ground);
+const pivot = new THREE.Group(); SC.add(pivot);
+let G = null, ctr = new THREE.Vector3(), rad = 0.6, mode = 'orbit';
+const orb = { yaw: -1.2, pitch: 0.25, dist: 1.6, tx: 0, ty: 0, tz: 0 };
+
+
+Object.keys(WEAPONS).forEach(k => $('w').add(new Option(WEAPONS[k].name, k)));
+function fillSlots() {
+  const d = WEAPONS[$('w').value];
+  ['optic', 'muzzle', 'under'].forEach(s => { const el = $(s); el.innerHTML = ''; (d.slots[s] || []).forEach(v => el.add(new Option(v, v))); if (d.def[s]) el.value = d.def[s]; });
+}
+function rebuild() {
+  if (G) pivot.remove(G.group);
+  const id = $('w').value, mods = { optic: $('optic').value || null, muzzle: $('muzzle').value || null, under: $('under').value || null };
+  const t0 = performance.now(); G = buildGun(id, mods, true); const ms = performance.now() - t0;
+  pivot.add(G.group); pivot.position.set(0, 0, 0); pivot.updateMatrixWorld(true);
+  const bb = new THREE.Box3().setFromObject(G.group); bb.getCenter(ctr); rad = bb.getSize(new THREE.Vector3()).length() / 2;
+  let tris = 0, calls = 0; G.group.traverse(o => { if (o.isMesh) { calls++; tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; } });
+  if (marks.length) showMarks();
+  $('info').textContent = `build ${ms.toFixed(0)} ms, ${calls} meshes, ${(tris / 1000).toFixed(1)}k tris\nsightY ${(G.sightY ?? 0).toFixed(4)}  eyeZ ${(G.eyeZ ?? 0).toFixed(4)}\nstockZ ${G.stockZ}  muzzle z ${G.muzzle.position.z.toFixed(3)}\nsupp ${G.supp} bipod ${G.bipod} optic ${G.optic ? G.optic.name : '-'}`;
+  anim();
+}
+let marks = [];
+function showMarks() {
+  marks.forEach(m => m.parent && m.parent.remove(m)); marks = [];
+  if (!$('marks').checked || !G) return;
+  ['grip', 'fore', 'muzzle', 'eject', 'boltKnob', 'blade', 'tip'].forEach(k => { const o = G[k]; if (!o) return; const s = new THREE.Mesh(new THREE.SphereGeometry(0.006, 10, 8), new THREE.MeshBasicMaterial({ color: k === 'grip' ? 0xff3030 : k === 'fore' ? 0x30ff30 : 0x30a0ff, depthTest: false })); s.renderOrder = 9; o.add(s); marks.push(s); });
+  if (G.sightY !== undefined) { const s = new THREE.Mesh(new THREE.SphereGeometry(0.005, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffff00, depthTest: false })); s.position.set(0, G.sightY, G.eyeZ); s.renderOrder = 9; G.group.add(s); marks.push(s); }
+}
+function anim() {
+  if (!G) return;
+  if (G.bolt) { G.bolt.rotation.z = +$('bR').value; G.bolt.position.z = +$('bZ').value; }
+  if (G.slide) G.slide.position.z = +$('sZ').value;
+  if (G.ch) G.ch.position.z = +$('sZ').value * 2;
+  if (G.mag) G.mag.position.y = -$('mY').value;
+}
+['w'].forEach(i => $(i).onchange = () => { fillSlots(); rebuild(); });
+['optic', 'muzzle', 'under'].forEach(i => $(i).onchange = rebuild);
+['bR', 'bZ', 'sZ', 'mY'].forEach(i => $(i).oninput = anim);
+$('marks').onchange = showMarks;
+const VIEWS = { right: [Math.PI / 2, 0.02, 1], left: [-Math.PI / 2, 0.02, 1], top: [Math.PI / 2, 1.5, 1], bottom: [Math.PI / 2, -1.5, 1], front: [Math.PI, 0.05, 1], rear: [0, 0.1, 1], q1: [-0.75, 0.3, 0.9], q2: [-2.4, 0.3, 0.9], q3: [0.75, 0.3, 0.9], q4: [2.4, 0.3, 0.9], ql: [-0.6, -0.35, 0.9] };
+function setView(v, zoom = 1, gx = null, gy = 0, gz = 0) {
+  if (v === 'ads' || v === 'hip') { mode = v; return; }
+  mode = 'orbit'; const p = VIEWS[v]; orb.yaw = p[0]; orb.pitch = p[1]; orb.dist = rad * 2.6 * p[2] / zoom;
+  if (gx === null) { orb.tx = orb.ty = orb.tz = 0; } else { orb.tx = gx - ctr.x; orb.ty = gy - ctr.y; orb.tz = gz - ctr.z; }
+}
+document.querySelectorAll('[data-v]').forEach(b => b.onclick = () => setView(b.dataset.v));
+// orbit controls
+let drag = null;
+R.domElement.addEventListener('contextmenu', e => e.preventDefault());
+R.domElement.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, b: e.button }; R.domElement.setPointerCapture(e.pointerId); });
+R.domElement.addEventListener('pointermove', e => {
+  if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
+  if (drag.b === 0) { orb.yaw -= dx * 0.008; orb.pitch = Math.max(-1.5, Math.min(1.5, orb.pitch + dy * 0.008)); }
+  else { const k = orb.dist * 0.0015; const r = new THREE.Vector3().setFromMatrixColumn(CAM.matrix, 0), u = new THREE.Vector3().setFromMatrixColumn(CAM.matrix, 1); orb.tx += (-r.x * dx + u.x * dy) * k; orb.ty += (-r.y * dx + u.y * dy) * k; orb.tz += (-r.z * dx + u.z * dy) * k; }
+});
+R.domElement.addEventListener('pointerup', () => drag = null);
+R.domElement.addEventListener('wheel', e => { orb.dist *= Math.exp(e.deltaY * 0.001); e.preventDefault(); }, { passive: false });
+function resize() { if (window.__fixed) return; R.setSize(innerWidth, innerHeight); CAM.aspect = innerWidth / innerHeight; CAM.updateProjectionMatrix(); }
+addEventListener('resize', resize); resize();
+let last = performance.now();
+function frame(t) { draw(t); requestAnimationFrame(frame); }
+function draw(t = performance.now()) {
+  const dt = Math.min(0.1, (t - last) / 1000); last = t;
+  if ($('spin').checked) orb.yaw += dt * 0.4;
+  if (mode === 'orbit') {
+    CAM.fov = 30; CAM.near = 0.01; CAM.updateProjectionMatrix();
+    pivot.position.set(-ctr.x, -ctr.y, -ctr.z); pivot.rotation.set(0, 0, 0);
+    const c = new THREE.Vector3(orb.tx, orb.ty, orb.tz);
+    CAM.position.set(c.x + Math.sin(orb.yaw) * Math.cos(orb.pitch) * orb.dist, c.y + Math.sin(orb.pitch) * orb.dist, c.z + Math.cos(orb.yaw) * Math.cos(orb.pitch) * orb.dist);
+    CAM.lookAt(c);
+  } else if (G) {
+    // first-person: camera at origin looking down -z, gun placed like the viewmodel
+    CAM.fov = mode === 'ads' ? 40 : 70; CAM.near = 0.01; CAM.updateProjectionMatrix();
+    CAM.position.set(0, 0, 0); CAM.rotation.set(0, 0, 0);
+    const h = G.def.hip || [0.15, -0.15, -0.4];
+    if (mode === 'ads') { pivot.position.set(0, -(G.sightY || 0), -(G.eyeZ || 0.3)); pivot.rotation.set(0, 0, 0); } else { const r = G.def.hipRot || [0, 0, 0]; pivot.position.set(h[0], h[1], h[2]); pivot.rotation.set(r[0], 0.03 + r[1], 0.02 + r[2]); }
+  }
+  R.render(SC, CAM);
+}
+window.draw = draw;
+// dev: render views off-screen and post PNGs to a local receiver (works while the tab is in the background)
+window.sheet = async (name, views, W = 900, H = 520, cols = 2) => {
+  const rows = Math.ceil(views.length / cols), c = document.createElement('canvas'); c.width = W * cols; c.height = H * rows;
+  const g = c.getContext('2d'); R.setPixelRatio(1); R.setSize(W, H); CAM.aspect = W / H; CAM.updateProjectionMatrix();
+  views.forEach((v, i) => { if (typeof v === 'function') v(); else setView(...v); if (mode !== 'orbit') { CAM.aspect = W / H; } draw(); g.drawImage(R.domElement, (i % cols) * W, Math.floor(i / cols) * H); });
+  await fetch(window.SHEET_URL || 'http://127.0.0.1:8790/', { method: 'POST', body: name + '|' + c.toDataURL('image/png') });
+  resize(); return 'ok';
+};
+window.sel = (id, mods = {}) => { $('w').value = id; fillSlots(); Object.entries(mods).forEach(([k, v]) => $(k).value = v); rebuild(); };
+window.setView = setView;
+addEventListener('keydown', e => { if (e.key === 'h') $('ui').hidden = !$('ui').hidden; });
+window.ui = v => $('ui').hidden = !v;
+fillSlots(); rebuild(); setView('right'); requestAnimationFrame(frame);
+</script>
+</body>
+</html>
