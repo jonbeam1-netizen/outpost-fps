@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Outpost — Deathmatch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<!-- ===== In-game HUD ===== -->
+<div id="hud" hidden>
+  <div id="crosshair"><i></i><i></i><i></i><i></i><b></b></div>
+  <div id="hitmarker"><i></i><i></i><i></i><i></i></div>
+  <div id="scopeOverlay"><div class="ring"></div><div class="h"></div><div class="v"></div></div>
+  <div id="dmgDir"></div>
+  <div id="vignette"></div>
+  <div id="killfeed"></div>
+  <div id="codeTag"></div>
+  <div id="hint"></div>
+  <div id="targetName"></div>
+  <div id="bottomLeft">
+    <div id="hpBar"><div id="hpFill"></div><span id="hpText">100</span></div>
+    <div id="kd">K 0 · D 0</div>
+  </div>
+  <div id="bottomRight">
+    <div id="weaponName">M4A1</div>
+    <div id="ammo"><span id="ammoMag">30</span><span id="ammoRes">/ 150</span></div>
+    <div id="fireMode">AUTO</div>
+  </div>
+  <div id="centerMsg"></div>
+  <div id="scoreboard" hidden><h3>SCOREBOARD <span id="sbMode">FREE-FOR-ALL</span></h3><table><thead><tr><th>Operator</th><th>K</th><th>D</th><th>K/D</th></tr></thead><tbody id="sbBody"></tbody></table></div>
+  <div id="deathScreen" hidden>
+    <div class="dsTitle">KILLED</div>
+    <div id="dsBy"></div>
+    <div id="dsTimer"></div>
+    <div class="dsSmall">Change your loadout from the pause menu (Esc)</div>
+  </div>
+</div>
+
+<!-- ===== Main menu ===== -->
+<div id="menu" class="overlay">
+  <div class="menuWrap">
+    <div class="brand">
+      <div class="logo">OUTPOST</div>
+      <div class="sub">DEATHMATCH · PEER-TO-PEER · 2–10 OPERATORS</div>
+    </div>
+    <div class="menuGrid">
+      <section class="panel">
+        <h2>Operator</h2>
+        <label>Callsign <input id="nameIn" maxlength="14" placeholder="Callsign"></label>
+        <div class="label">Outfit</div>
+        <div id="outfitPick" class="swatches"></div>
+        <h2 class="mt">Play</h2>
+        <button id="btnHost" class="primary">HOST GAME</button>
+        <div class="joinRow">
+          <input id="codeIn" placeholder="DM-XXXX" maxlength="7">
+          <button id="btnJoin">JOIN</button>
+        </div>
+        <div id="netStatus" class="status"></div>
+        <button id="btnSettings" class="ghost mt">SETTINGS</button>
+        <div class="controls">
+          <b>WASD</b> move · <b>Shift</b> sprint · <b>C</b> crouch · <b>Space</b> jump<br>
+          <b>Q / E</b> lean · <b>RMB</b> aim · <b>R</b> reload · <b>B</b> fire mode<br>
+          <b>1 / 2</b> or wheel swap · <b>Tab</b> scores · <b>Esc</b> pause
+        </div>
+      </section>
+      <section class="panel loadout">
+        <h2>Loadout</h2>
+        <div id="gunList" class="gunList"></div>
+        <div class="gunDetail">
+          <canvas id="gunPreview" width="640" height="300"></canvas>
+          <div id="gunTitle" class="gunTitle"></div>
+          <div id="gunDesc" class="gunDesc"></div>
+          <div id="modSlots" class="modSlots"></div>
+          <div id="gunStats" class="stats"></div>
+          <div class="secondary">Secondary: <b>Glock 17</b> <select id="glockMuzzle"><option value="none">No muzzle device</option><option value="supp">Suppressor</option></select></div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Pause ===== -->
+<div id="pause" class="overlay" hidden>
+  <div class="pauseBox">
+    <h2>PAUSED</h2>
+    <div id="pauseCode" class="pauseCode"></div>
+    <button id="btnResume" class="primary">RESUME</button>
+    <button id="btnLoadout">LOADOUT</button>
+    <button id="btnPauseSettings">SETTINGS</button>
+    <button id="btnLeave" class="ghost">LEAVE GAME</button>
+  </div>
+</div>
+
+<!-- ===== Settings ===== -->
+<div id="settings" class="overlay" hidden>
+  <div class="pauseBox wide">
+    <h2>SETTINGS</h2>
+    <div class="setRow"><span>Master volume</span><input type="range" id="sVol" min="0" max="100" step="1"><output id="oVol"></output></div>
+    <div class="setRow"><span>Mouse sensitivity</span><input type="range" id="sSens" min="0.1" max="3" step="0.05"><output id="oSens"></output></div>
+    <div class="setRow"><span>Aim sensitivity</span><input type="range" id="sAds" min="0.2" max="1.5" step="0.05"><output id="oAds"></output></div>
+    <div class="setRow"><span>Field of view</span><input type="range" id="sFov" min="65" max="105" step="1"><output id="oFov"></output></div>
+    <div class="setRow"><span>Shadows</span><select id="sShadow"><option value="0">Off</option><option value="1">Low</option><option value="2">High</option></select></div>
+    <div class="setRow"><span>Render scale</span><select id="sScale"><option value="0.6">60%</option><option value="0.8">80%</option><option value="1">100%</option><option value="1.5">150%</option></select></div>
+    <div class="setRow"><span>Grass</span><select id="sGrass"><option value="0">Off</option><option value="1">On</option></select></div>
+    <div class="setRow"><span>Aim mode</span><select id="sAimMode"><option value="hold">Hold</option><option value="toggle">Toggle</option></select></div>
+    <div class="setRow"><span>Invert mouse Y</span><select id="sInvert"><option value="0">No</option><option value="1">Yes</option></select></div>
+    <button id="btnSetBack" class="primary">BACK</button>
+  </div>
+</div>
+
+<div id="loading" class="overlay"><div class="loadTxt">BUILDING THE OUTPOST…</div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="js/util.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/map.js"></script>
+<script src="js/guns.js"></script>
+<script src="js/character.js"></script>
+<script src="js/fx.js"></script>
+<script src="js/player.js"></script>
+<script src="js/net.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
