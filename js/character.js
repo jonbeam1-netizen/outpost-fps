@@ -624,7 +624,9 @@ function animateOperator(op, st, dt) {
   const p = smoothT(op.pr), c = op.cr * (1 - p), char = op.char, ip = 1 - p;
   const moving = op.speed > 0.2, crawl = moving ? p : 0;
   // walk: phase by distance; crawl is a slower cycle
-  op.phase += (op.speed * dt) / lerp(0.55 + c * 0.2, 0.32, p) * Math.PI;
+  // a full, unhurried stride: ~0.8 m per step walking, ~1 m sprinting (it used to be 0.55 m, a shuffle)
+  const stepLen = lerp(lerp(0.8, 1.0, clamp((op.speed - 4) / 2, 0, 1)) - c * 0.15, 0.32, p);
+  op.phase += (op.speed * dt) / stepLen * Math.PI;
   const cs = Math.sin(op.phase), cc = Math.cos(op.phase);
   // death: standing bodies fall backwards, prone ones just go limp and roll a little
   if (op.dead > 0) {
@@ -635,7 +637,7 @@ function animateOperator(op, st, dt) {
   op.tilt = lerp(op.tilt || 0, stance === 2 ? proneTilt(st.pos, st.yaw) : 0, 1 - Math.exp(-dt * 6));
   char.rotation.x += op.tilt * p;
   // pelvis: upright → lying face down (rotated forward a quarter turn), hips behind the player position
-  const hipY = lerp(0.93, 0.62, c) + (moving ? Math.abs(cs) * 0.035 * ip : 0);
+  const hipY = lerp(0.93, 0.62, c) - (moving ? (1 - Math.abs(cs)) * 0.03 * ip : 0);   // the body dips as the legs pass, rises over the planted foot
   op.pelvis.position.set(op.lean * 0.12 * ip, lerp(hipY, 0.15, p), lerp(0, 0.34, p));
   op.pelvis.rotation.set(-Math.PI / 2 * 0.97 * p, 0, -op.lean * 0.18 + crawl * cs * 0.07);
   // spine: bends forward crouched/sprinting; prone it arches up so the chest rests on the elbows
@@ -646,14 +648,14 @@ function animateOperator(op, st, dt) {
   op.head.position.set(sc * 0.025, 0.6 - sc * 0.02, -sc * 0.035 * ip);
   op.pelvis.updateMatrix();
   // legs
-  const stride = clamp(op.speed / 5, 0, 1.4);
+  const stride = clamp(op.speed / 5, 0, 1.4), amp = Math.min(0.42, stepLen * 0.5) * clamp(op.speed / 1.2, 0, 1);   // feet swing half a step each way so they plant instead of sliding
   const mvx = moving ? vr / Math.max(op.speed, 0.01) : 0, mvz = moving ? -vf / Math.max(op.speed, 0.01) : 0;
   op.legs.forEach((leg, i) => {
     const ph = op.phase + (i ? Math.PI : 0), sw = Math.sin(ph), lift = Math.max(0, Math.cos(ph));
     _hip.set(leg.s * 0.095, -0.04, 0).applyMatrix4(op.pelvis.matrix);
     // standing / crouched foot target
-    _ft.set(leg.s * (0.12 + c * 0.04) + op.lean * 0.06, 0.085 + lift * 0.12 * stride, c * -0.08);
-    _ft.x += mvx * sw * 0.28 * stride; _ft.z += mvz * sw * 0.32 * stride;
+    _ft.set(leg.s * (0.12 + c * 0.04) + op.lean * 0.06, 0.085 + lift * lift * (0.1 + 0.08 * stride), c * -0.08);
+    _ft.x += mvx * sw * amp; _ft.z += mvz * sw * amp;
     if (c > 0.5 && i === 1) _ft.z += 0.22 * c;   // one knee down-ish
     // prone: legs straight back, toes in the dirt; crawling draws one knee up and out at a time
     const draw = crawl * Math.max(0, sw);

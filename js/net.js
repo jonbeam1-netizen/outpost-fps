@@ -232,7 +232,6 @@ function remotesTick(dt) {
     const visible = c.alive || (r.deadAt && now - r.deadAt < 3200);
     r.op.root.visible = !!visible;
     if (visible) {
-      const ph0 = r.op.phase;
       animateOperator(r.op, st, dt);
       // far away, nobody can make out their shadow: skip the shadow pass for them
       const far = st.pos.distanceTo(CAMERA.position) > 55;
@@ -240,7 +239,13 @@ function remotesTick(dt) {
       // the map bakes darkness into interiors; dim people standing in there to match
       if (typeof occAt === 'function' && r.op.mats && r.op.mats.m) { const k = 1 - occAt(st.pos.x, st.pos.z, st.pos.y + 1); r.op.mats.m.color.setScalar(lerp(r.op.mats.m.color.r, k, 1 - Math.exp(-dt * 4))); }
       // footsteps when a foot comes down
-      if (st.alive && Math.floor(r.op.phase / Math.PI) !== Math.floor(ph0 / Math.PI) && r.op.speed > 0.8) SFX.step(st.pos, surfaceAt(st.pos.x, st.pos.z, st.pos.y), [0.8, 0.4, 0.25][st.stance || 0] * (st.sprint ? 1.5 : 1));
+      // footsteps on the same stride as our own (player.js playerPhysics), measured by how far they actually moved
+      if (st.alive) {
+        const lp = r.stepPos || (r.stepPos = st.pos.clone()), moved = Math.hypot(st.pos.x - lp.x, st.pos.z - lp.z); lp.copy(st.pos);
+        if (moved < 3 && r.op.speed > 0.4) r.stepDist = (r.stepDist || 0) + moved; else r.stepDist = 0;   // a jump of 3 m+ is a respawn, not a step
+        const stride = st.sprint ? 2.1 : [1.75, 1.3, 0.9][st.stance || 0];
+        if (r.stepDist > stride) { r.stepDist = 0; SFX.step(st.pos, surfaceAt(st.pos.x, st.pos.z, st.pos.y), [0.7, 0.35, 0.25][st.stance || 0] * (st.sprint ? 1.45 : 1)); }
+      }
       // a scope pointed at you catches the light
       if (st.alive && st.ads && r.wid && WEAPONS[r.wid] && !WEAPONS[r.wid].pistol && !WEAPONS[r.wid].melee) remoteGlint(st, r.op);
     }
