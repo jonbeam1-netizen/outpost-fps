@@ -66,6 +66,9 @@ function inputInit() {
   window.addEventListener('keydown', e => {
     if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
     if (e.code === 'Tab' || (GAME.running && e.code === 'Space')) e.preventDefault();
+    if (GAME.running && !cmdOpen() && (e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'Slash' || e.code === 'KeyT')) {
+      e.preventDefault(); openCmd(e.code === 'Slash' ? '/' : ''); return;
+    }
     if (!INPUT.keys[e.code]) INPUT.pressed[e.code] = true;
     INPUT.keys[e.code] = true;
   });
@@ -84,7 +87,7 @@ function inputInit() {
   window.addEventListener('wheel', e => { if (INPUT.locked) INPUT.wheel += Math.sign(e.deltaY); }, { passive: true });
   document.addEventListener('pointerlockchange', () => {
     INPUT.locked = document.pointerLockElement === canvas;
-    if (!INPUT.locked) { INPUT.mouse.l = INPUT.mouse.r = false; if (GAME.running && $('menu').hidden && $('settings').hidden) $('pause').hidden = false; }
+    if (!INPUT.locked) { INPUT.mouse.l = INPUT.mouse.r = false; closeCmd(); if (GAME.running && $('menu').hidden && $('settings').hidden) $('pause').hidden = false; }
     else { $('pause').hidden = true; $('hint').textContent = ''; }
   });
 }
@@ -101,6 +104,7 @@ function frame(now) {
   const dt = Math.min(0.05, Math.max(0, (now - last) / 1000)); last = now;
   if (GAME.running) {
     playerTick(dt);
+    botsTick(dt);
     remotesTick(dt);
     netTick(dt);
     hudTick(dt);

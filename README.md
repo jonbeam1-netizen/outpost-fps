@@ -29,7 +29,18 @@ One player hosts and gets a code like `DM-7K2F`; friends type the code to join.
 | B | fire mode |
 | 1 / 2, wheel | primary / pistol |
 | Tab | scoreboard |
-| Esc | pause: loadout, settings, leave |
+| Esc | pause: loadout, settings, bots, leave |
+| Enter (or T) | chat and commands |
+
+## Bots
+
+Type in the chat box (Enter), or use the + BOT / − BOT buttons in the pause menu:
+
+- `/addbot` or `/addbot 3` — add bots (up to 10)
+- `/removebot`, `/removebot 2`, `/removebot all` — remove bots
+- `/botdiff easy|normal|hard` — bot skill
+
+Bots run on the host's computer and show up for everyone like normal players. Anyone in the match can use the commands. Bots also work in offline practice.
 
 Settings (volume starts at 10%, sensitivity, FOV, shadows, render scale, grass) are saved in your browser.
 

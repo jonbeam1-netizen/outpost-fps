@@ -135,7 +135,40 @@ function pauseUI() {
   $('btnResume').onclick = () => { $('pause').hidden = true; lockPointer(); };
   $('btnLoadout').onclick = () => { $('pause').hidden = true; showMenu(true); refreshLoadout(); };
   $('btnLeave').onclick = () => leaveToMenu();
+  $('btnAddBot').onclick = () => addBots(1);
+  $('btnRemoveBot').onclick = () => removeBots(1);
+  $('botDiff').onchange = e => setBotDiff(e.target.value);
+  // chat / command line
+  const ci = $('cmdIn');
+  ci.addEventListener('keydown', e => {
+    e.stopPropagation();
+    if (e.key === 'Enter') { const v = ci.value.trim(); closeCmd(); if (v) runCmd(v); }
+    else if (e.key === 'Escape') closeCmd();
+  });
   $('pauseCode').onclick = () => { if (NET.code && navigator.clipboard) navigator.clipboard.writeText(NET.code).then(() => { $('pauseCode').textContent = 'Copied ' + NET.code; }).catch(() => {}); };
+}
+function openCmd(prefix = '') {
+  if (!GAME.running || !$('pause').hidden || !$('menu').hidden) return;
+  INPUT.keys = {}; INPUT.mouse.l = INPUT.mouse.r = false;
+  $('cmdBox').hidden = false; const ci = $('cmdIn'); ci.value = prefix; ci.focus();
+}
+function closeCmd() { const ci = $('cmdIn'); ci.value = ''; ci.blur(); $('cmdBox').hidden = true; }
+const cmdOpen = () => !$('cmdBox').hidden;
+function runCmd(text) {
+  if (text[0] !== '/') { netOut({ t: 'chat', text }); if (!NET.online) hudChat(NET.myId, text); return; }
+  const [c, arg] = text.slice(1).toLowerCase().split(/\s+/);
+  const n = arg === 'all' ? 'all' : clamp(parseInt(arg, 10) || 1, 1, 10);
+  if (c === 'addbot' || c === 'addbots' || c === 'bot') addBots(n === 'all' ? BOTCFG.max : n);
+  else if (c === 'removebot' || c === 'removebots' || c === 'kickbot') removeBots(n);
+  else if (c === 'botdiff' || c === 'difficulty') { setBotDiff(arg); if (BOT_DIFF[arg]) $('botDiff').value = arg; }
+  else if (c === 'help') hudFeedText('/addbot [n] · /removebot [n|all] · /botdiff easy|normal|hard', 8);
+  else hudFeedText('Unknown command. Try /help');
+}
+function hudChat(id, text) {
+  const el = document.createElement('div'); el.className = 'chat';
+  el.innerHTML = `<b>${escapeHtml(nameOf(id))}</b>${escapeHtml(text)}`;
+  $('killfeed').prepend(el); HUD.feed.push({ el, t: 8 });
+  while ($('killfeed').children.length > 7) $('killfeed').lastChild.remove();
 }
 function lockPointer() { const c = $('view'); try { const p = c.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) {} }
 
@@ -150,9 +183,14 @@ function startGame() {
   lockPointer();
   hudCenter(NET.online ? 'FREE-FOR-ALL · click to aim' : 'Practice — host a game to play with friends', 3);
 }
-function startOffline() { NET.online = false; startGame(); }
+// offline practice acts as a host with nobody connected, so bots work the same way
+function startOffline() {
+  NET.online = false; NET.host = true; NET.myId = 'me';
+  NET.players = { me: Object.assign(myProfile(), { k: 0, d: 0 }) };
+  startGame();
+}
 function leaveToMenu(msg) {
-  netLeave(); GAME.running = false; PL.alive = false;
+  netLeave(); GAME.running = false; PL.alive = false; closeCmd();
   try { document.exitPointerLock(); } catch (e) {}
   $('hud').hidden = true; $('pause').hidden = true; $('deathScreen').hidden = true; showMenu(false);
   if (VM.root) VM.root.visible = false;
@@ -196,7 +234,7 @@ function hudKillFeed(k, v, w, hs) {
   $('killfeed').prepend(el); HUD.feed.push({ el, t: 6 });
   while ($('killfeed').children.length > 6) $('killfeed').lastChild.remove();
 }
-function hudFeedText(txt) { const el = document.createElement('div'); el.textContent = txt; el.style.borderLeftColor = '#8d927f'; $('killfeed').prepend(el); HUD.feed.push({ el, t: 4 }); }
+function hudFeedText(txt, t = 4) { const el = document.createElement('div'); el.textContent = txt; el.style.borderLeftColor = '#8d927f'; $('killfeed').prepend(el); HUD.feed.push({ el, t }); }
 function hudCenter(txt, t = 2) { const c = $('centerMsg'); c.textContent = txt; c.style.opacity = 1; HUD.centerT = t; }
 let _sbT = 0, _tnT = 0;
 function hudTick(dt) {
@@ -236,7 +274,7 @@ function hudTick(dt) {
   if (show && (_sbT -= dt) <= 0) {
     _sbT = 0.25;
     const rows = [];
-    if (NET.online) for (const id in NET.players) { const p = NET.players[id]; rows.push({ id, name: p.name, outfit: p.outfit, k: p.k, d: p.d }); }
+    if (Object.keys(NET.players).length) for (const id in NET.players) { const p = NET.players[id]; rows.push({ id, name: p.name, outfit: p.outfit, k: p.k, d: p.d }); }
     else rows.push({ id: 'me', name: PROFILE.name || 'You', outfit: PL.outfit, k: PL.kills, d: PL.deaths });
     rows.sort((a, b) => b.k - a.k || a.d - b.d);
     $('sbBody').innerHTML = rows.map(r => `<tr class="${r.id === NET.myId || r.id === 'me' ? 'me' : ''}"><td><span class="dot" style="background:${(OUTFITS[r.outfit] || OUTFITS.ranger).base}"></span>${escapeHtml(r.name)}</td><td>${r.k}</td><td>${r.d}</td><td>${(r.k / Math.max(1, r.d)).toFixed(2)}</td></tr>`).join('');

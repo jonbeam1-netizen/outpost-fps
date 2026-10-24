@@ -13,7 +13,7 @@ const myProfile = () => ({ name: PROFILE.name || 'Operator', outfit: PL.outfit, 
 
 // a message from us: the host handles it directly, a client sends it to the host
 function netOut(m) {
-  if (!NET.online) return;
+  if (!NET.online && !NET.host) return;   // offline practice runs as a host with nobody connected
   if (NET.host) hostReceive(NET.myId, m); else netSendTo(NET.hostConn, m);
 }
 // ---------- Host side ----------
@@ -36,9 +36,17 @@ function hostReceive(from, m) {
       if (from !== NET.myId) clientReceive(out);
       break;
     }
-    case 'hit': {
-      const out = { t: 'hit', by: from, dmg: clamp(+m.dmg || 0, 0, 400), zone: m.zone, w: m.w };
-      if (m.to === NET.myId) clientReceive(out); else netSendTo(NET.conns.get(m.to), out);
+    case 'hit': hostDeliverHit(from, m.to, clamp(+m.dmg || 0, 0, 400), m.zone, m.w); break;
+    case 'chat': {
+      const out = { t: 'chat', id: from, text: String(m.text || '').slice(0, 120) };
+      netBroadcast(out); clientReceive(out);
+      break;
+    }
+    case 'cmd': {   // a client asked the host to manage bots
+      if (m.c === 'addbot') addBots(clamp(m.n | 0 || 1, 1, 10));
+      else if (m.c === 'removebot') removeBots(m.n === 'all' ? 'all' : clamp(m.n | 0 || 1, 1, 10));
+      else if (m.c === 'botdiff') setBotDiff(String(m.d));
+      if (P[from] && from !== NET.myId) hudFeedText(P[from].name + ' used /' + m.c);
       break;
     }
     case 'died': {
@@ -51,6 +59,13 @@ function hostReceive(from, m) {
       break;
     }
   }
+}
+// The host hands a hit to whoever owns the victim's health: a bot (here), the host itself, or a client
+function hostDeliverHit(from, to, dmg, zone, w) {
+  const out = { t: 'hit', by: from, dmg, zone, w };
+  if (BOTS.has(to)) botDamage(BOTS.get(to), dmg, from, zone, w);
+  else if (to === NET.myId) clientReceive(out);
+  else netSendTo(NET.conns.get(to), out);
 }
 function netHost() {
   if (typeof Peer === 'undefined') { netStatus('Online play could not load — playing offline'); startOffline(); return; }
@@ -102,6 +117,7 @@ function netJoin(raw) {
 function netLeave() {
   try { if (NET.peer) NET.peer.destroy(); } catch (e) {}
   NET.peer = null; NET.host = false; NET.hostConn = null; NET.conns.clear(); NET.code = ''; NET.online = false; NET.players = {};
+  botsReset();
   REMOTES.forEach(r => { if (r.op) SCENE.remove(r.op.root); }); REMOTES.clear();
 }
 // ---------- Messages arriving at every player ----------
@@ -125,6 +141,8 @@ function clientReceive(m) {
       if (m.s <= r.lastSeq) return; r.lastSeq = m.s;
       r.buf.push({ t: performance.now(), pos: new V3(m.p[0], m.p[1], m.p[2]), yaw: m.y, pitch: m.x, crouch: !!m.c, lean: m.l || 0, ads: !!m.a, sprint: !!m.sp, reload: !!m.r, alive: !!m.al, g: m.g });
       if (r.buf.length > 30) r.buf.shift();
+      // someone already alive when we joined (we never saw their respawn message)
+      if (m.al && !r.alive && (!r.deadAt || performance.now() - r.deadAt > 1500)) r.alive = true;
       break;
     }
     case 'shot': remoteShot(m); break;
@@ -137,6 +155,7 @@ function clientReceive(m) {
       break;
     }
     case 'respawn': { const r = REMOTES.get(m.id); if (r) { r.alive = true; r.buf.length = 0; } break; }
+    case 'chat': hudChat(m.id, m.text); break;
   }
 }
 // ---------- Outgoing ----------
@@ -151,10 +170,7 @@ function netTick(dt) {
 }
 function netShot(o, e, w, supp) { netOut({ t: 'shot', o: [+o.x.toFixed(2), +o.y.toFixed(2), +o.z.toFixed(2)], e: [+e.x.toFixed(2), +e.y.toFixed(2), +e.z.toFixed(2)], w, s: supp ? 1 : 0 }); }
 function netHit(to, dmg, zone, w) { netOut({ t: 'hit', to, dmg, zone, w }); }
-function netDied(killer, w, hs) {
-  if (!NET.online) { hudKillFeed(killer, NET.myId, w, hs); return; }
-  netOut({ t: 'died', k: killer, w, hs });
-}
+function netDied(killer, w, hs) { netOut({ t: 'died', k: killer, w, hs }); }
 function netRespawn() { netOut({ t: 'respawn' }); }
 
 // ---------- Remote players: interpolate, animate, play their shots ----------

@@ -32,6 +32,7 @@
     <div id="fireMode">AUTO</div>
   </div>
   <div id="centerMsg"></div>
+  <div id="cmdBox" hidden><input id="cmdIn" maxlength="120" autocomplete="off" spellcheck="false" placeholder="Chat, or /addbot  /removebot  /botdiff  /help"></div>
   <div id="scoreboard" hidden><h3>SCOREBOARD <span id="sbMode">FREE-FOR-ALL</span></h3><table><thead><tr><th>Operator</th><th>K</th><th>D</th><th>K/D</th></tr></thead><tbody id="sbBody"></tbody></table></div>
   <div id="deathScreen" hidden>
     <div class="dsTitle">KILLED</div>
@@ -65,7 +66,8 @@
         <div class="controls">
           <b>WASD</b> move · <b>Shift</b> sprint · <b>C</b> crouch · <b>Space</b> jump<br>
           <b>Q / E</b> lean · <b>RMB</b> aim · <b>R</b> reload · <b>B</b> fire mode<br>
-          <b>1 / 2</b> or wheel swap · <b>Tab</b> scores · <b>Esc</b> pause
+          <b>1 / 2</b> or wheel swap · <b>Tab</b> scores · <b>Esc</b> pause<br>
+          <b>Enter</b> chat &amp; commands: <b>/addbot 3</b> · <b>/removebot</b> · <b>/removebot all</b>
         </div>
       </section>
       <section class="panel loadout">
@@ -91,6 +93,7 @@
     <div id="pauseCode" class="pauseCode"></div>
     <button id="btnResume" class="primary">RESUME</button>
     <button id="btnLoadout">LOADOUT</button>
+    <div class="botRow"><button id="btnAddBot">+ BOT</button><button id="btnRemoveBot">− BOT</button><select id="botDiff"><option value="easy">Easy bots</option><option value="normal" selected>Normal bots</option><option value="hard">Hard bots</option></select></div>
     <button id="btnPauseSettings">SETTINGS</button>
     <button id="btnLeave" class="ghost">LEAVE GAME</button>
   </div>
@@ -125,6 +128,7 @@
 <script src="js/fx.js"></script>
 <script src="js/player.js"></script>
 <script src="js/net.js"></script>
+<script src="js/bots.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/main.js"></script>
 </body>

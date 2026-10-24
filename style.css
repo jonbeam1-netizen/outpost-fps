@@ -115,6 +115,12 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
 #ammoRes { font-size: 20px; color: var(--dim); margin-left: 6px; }
 #ammo.low #ammoMag { color: var(--red); }
 #fireMode { font-size: 13px; letter-spacing: 0.2em; color: var(--accent); }
+#cmdBox { position: absolute; left: 24px; bottom: 74px; width: min(460px, calc(100% - 48px)); pointer-events: auto; }
+#cmdIn { width: 100%; background: rgba(8,10,9,0.8); font-family: 'Share Tech Mono', monospace; font-size: 15px; }
+#killfeed .chat { border-left-color: #6a8fb3; font-weight: 500; }
+#killfeed .chat b { color: var(--accent); margin-right: 6px; }
+.botRow { display: grid; grid-template-columns: 1fr 1fr 1.3fr; gap: 6px; }
+.botRow select { min-width: 0; }
 #centerMsg { position: absolute; left: 50%; top: 30%; transform: translateX(-50%); font-size: 22px; font-weight: 700; letter-spacing: 0.12em; text-shadow: 0 2px 6px #000; opacity: 0; transition: opacity 0.3s; color: var(--accent); }
 #scoreboard { position: absolute; left: 50%; top: 14%; transform: translateX(-50%); width: min(560px, calc(100% - 32px)); background: rgba(10,12,10,0.82); border: 1px solid var(--line); padding: 14px 18px; }
 #scoreboard h3 { margin: 0 0 8px; letter-spacing: 0.2em; color: var(--accent); font-size: 16px; display: flex; justify-content: space-between; }
