@@ -176,11 +176,10 @@ function fxInit(scene, vmScene, camera = null) {
     g.strokeStyle = 'rgba(20,18,16,0.6)'; g.lineWidth = 1.2; for (let i = 0; i < 6; i++) { const a = Math.random() * TAU; g.beginPath(); g.moveTo(32 + Math.cos(a) * 6, 32 + Math.sin(a) * 6); g.lineTo(32 + Math.cos(a + rand(-0.3, 0.3)) * rand(14, 26), 32 + Math.sin(a) * rand(14, 26)); g.stroke(); }
   });
   // scope glint: hot core, long horizontal anamorphic streak, short vertical spike, faint ring
-  // the glint: a hard bright point with a hint of a cross, no halo
-  glintTex = canvasTex(64, 64, (g, w, h) => {
-    const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.18, 'rgba(255,248,230,0.9)'); gr.addColorStop(0.4, 'rgba(255,230,190,0.15)'); gr.addColorStop(1, 'rgba(255,220,180,0)');
-    g.fillStyle = gr; g.fillRect(0, 0, w, h);
-    g.fillStyle = 'rgba(255,250,240,0.35)'; g.fillRect(4, 31, 56, 2); g.fillRect(31, 10, 2, 44);
+  // the glint: a crisp pinpoint, hard edge, no glow at all
+  glintTex = canvasTex(32, 32, (g, w, h) => {
+    g.fillStyle = 'rgba(255,255,255,1)'; g.beginPath(); g.arc(16, 16, 6, 0, TAU); g.fill();
+    g.fillStyle = 'rgba(255,255,255,0.5)'; g.beginPath(); g.arc(16, 16, 8, 0, TAU); g.fill();
   });
   const atlas = atlasTex(); atlas.wrapS = atlas.wrapT = THREE.ClampToEdgeWrapping;
   FX.ps = makePS(4000, false, atlas); FX.pa = makePS(1200, true, atlas); scene.add(FX.ps.pts); scene.add(FX.pa.pts);
@@ -210,7 +209,7 @@ function fxInit(scene, vmScene, camera = null) {
     const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: mistTex, color: 0xffffff, transparent: true, depthWrite: false })), gl = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xffffff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
     m.visible = gl.visible = false; m.renderOrder = 3; gl.renderOrder = 3; scene.add(m); scene.add(gl); FX.bursts.push({ m, gl, t: 1, life: 1, s: 1, p: new V3() });
   }
-  for (let i = 0; i < 16; i++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glintTex, color: 0xfff2dc, transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending })); s.visible = false; s.renderOrder = 4; scene.add(s); FX.glints.push(s); }
+  for (let i = 0; i < 16; i++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glintTex, color: 0xc4bcae, transparent: true, depthWrite: false, fog: false, toneMapped: false })); s.visible = false; s.renderOrder = 4; scene.add(s); FX.glints.push(s); }
   screenInit();
 }
 const fxCamera = () => FX.cam || (typeof CAMERA !== 'undefined' ? CAMERA : null);
@@ -661,11 +660,11 @@ function fxGlint(p, strength = 1) {
   if (!FX.glints || FX.glintN >= FX.glints.length || strength <= 0.01) return;
   const s = FX.glints[FX.glintN++], cam = fxCamera();
   let dc = 20, pr = 1.3;
-  if (cam) { _v1.subVectors(cam.position, p); dc = _v1.length(); pr = cam.projectionMatrix.elements[5]; s.position.copy(p).addScaledVector(_v1.divideScalar(Math.max(dc, 1e-3)), Math.min(0.15, dc * 0.5)); } else s.position.copy(p);
+  if (cam) { _v1.subVectors(cam.position, p); dc = _v1.length(); pr = cam.projectionMatrix.elements[5]; s.position.copy(p).addScaledVector(_v1.divideScalar(Math.max(dc, 1e-3)), Math.min(0.4, dc * 0.5)); } else s.position.copy(p);   // pulled out in front of the lens, or the scope's own bell hides it
   // twinkles (a lens catching the light as it sways) so the eye picks it out of a dark window
   // a small, fixed on-screen size (same through any scope) so it gives the sniper away without hiding them; up close it fades out
   // just a pinprick of light on the lens: a few pixels at any range or zoom, no halo
-  const st = clamp(strength, 0, 1), tw = 0.8 + 0.2 * Math.sin(FX.time * 9 + p.x) * Math.sin(FX.time * 5.3 + p.z), size = Math.max(0.02, dc * 0.007 * (0.6 + 0.4 * st) * tw / pr);
+  const st = clamp(strength, 0, 1), tw = 0.8 + 0.2 * Math.sin(FX.time * 9 + p.x) * Math.sin(FX.time * 5.3 + p.z), size = Math.max(0.02, dc * 0.009 * (0.7 + 0.3 * st) * tw / pr);   // a ~4 px point at any range or zoom
   s.scale.set(size, size, 1); s.material.rotation = rand(-0.03, 0.03);
   s.material.opacity = st * 0.9 * (0.75 + 0.25 * tw) * smoothT((dc - 15) / 30); s.visible = true; s.userData.f = FX.frame;
 }

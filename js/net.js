@@ -256,7 +256,7 @@ function remoteGlint(st, op) {
   const tx = CAMERA.position.x - _glp.x, ty = CAMERA.position.y - _glp.y, tz = CAMERA.position.z - _glp.z, L = Math.hypot(tx, ty, tz);
   if (L < 8) return;
   const dot = (tx * fx + ty * fy + tz * fz) / L;
-  const s = smoothT((dot - 0.94) / 0.055);
+  const s = smoothT((dot - 0.86) / 0.12);   // glints when they look roughly your way, brightest straight down the barrel
   if (s > 0.02) fxGlint(_glp, s * (st.scoped ? 1 : 0.5));
 }
 function remoteShot(m) {
