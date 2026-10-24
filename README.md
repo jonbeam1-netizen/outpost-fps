@@ -51,8 +51,7 @@ one player hosts and gets a code like `DM-7K2F`, friends type the code to join. 
   The **M9 bayonet kills in one stab**, plates or not.
 - **Ammo cans** float and spin at fixed spots around town and come back 30 s after someone takes one.
   **Armor plates** appear rarely at random spots and rot away if nobody grabs them.
-- **Stay hidden.** Bushes and tall grass hide you from bots, going prone makes you hard to spot, and a scope pointed
-  at someone glints. Unsuppressed shots give your position away; suppressors are much quieter but not silent.
+- **Stay hidden.** Bushes and tall grass hide you from bots and going prone makes you hard to spot. Unsuppressed shots give your position away; suppressors are much quieter but not silent.
 - **Kill cam.** Taken out by a rifle round? Watch it fly in from your killer's muzzle in slow motion, with range,
   flight time and drop. Press any key to skip.
 - **Mind the birds.** Crows and pigeons perch on roofs, parapets and power lines. Walk, sprint, jump or fire an unsuppressed

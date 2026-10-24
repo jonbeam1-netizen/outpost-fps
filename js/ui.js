@@ -234,7 +234,7 @@ function startGame() {
   respawn();
   lockPointer();
   SFX.ambient(true);
-  hudCenter(NET.online ? 'FREE-FOR-ALL · stay low, watch for glint' : 'Practice — /addbot 4 for targets, host a game to play with friends', 4);
+  hudCenter(NET.online ? 'FREE-FOR-ALL · stay low, stay quiet' : 'Practice — /addbot 4 for targets, host a game to play with friends', 4);
 }
 // offline practice acts as a host with nobody connected, so bots work the same way
 function startOffline() {
@@ -306,7 +306,8 @@ function hudCenter(txt, t = 2) { const c = $('centerMsg'); c.textContent = txt; 
 // ---------- Scope glint: drawn on the HUD so glow, fog and distance can't swallow it ----------
 const GLINTS = []; let _glN = 0;
 const _gv = new V3(), _gd = new V3();
-function hudGlint(p, s) { if (_glN < 16) { const g = GLINTS[_glN] || (GLINTS[_glN] = { p: new V3(), s: 0 }); g.p.copy(p); g.s = s; _glN++; } }
+const GLINT_ON = false;   // scope glint is switched off; set true to bring it back (net.js remoteGlint feeds it)
+function hudGlint(p, s) { if (!GLINT_ON) return; if (_glN < 16) { const g = GLINTS[_glN] || (GLINTS[_glN] = { p: new V3(), s: 0 }); g.p.copy(p); g.s = s; _glN++; } }
 function drawGlints() {
   const cv = $('glintCv'); if (!cv) return;
   const W = window.innerWidth, H = window.innerHeight;
