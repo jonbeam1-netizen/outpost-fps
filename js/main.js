@@ -57,6 +57,7 @@ function boot() {
   fxInit(SCENE, null); vmInit(); FX.vmScene = VMSCENE;   // fx first: the viewmodel flash uses its texture
   settingsUI(); menuUI(); pauseUI(); applySettings();
   window.addEventListener('resize', onResize); onResize();
+  $('view').addEventListener('webglcontextlost', e => { e.preventDefault(); hudFeedText('Graphics driver reset — reload the page (try lower shadows / render scale)', 30); });
   inputInit();
   $('loading').hidden = true;
   requestAnimationFrame(frame);
@@ -98,20 +99,29 @@ function menuCam(dt) {
   const r = 70, x = Math.cos(menuT) * r, z = Math.sin(menuT) * r;
   CAMERA.position.set(x, 28, z); CAMERA.lookAt(Math.cos(menuT + 0.9) * 10, 4, Math.sin(menuT + 0.9) * 10);
 }
+// Show errors on screen (once each) so a player can tell us what broke
+const _seenErr = new Set();
+function reportError(where, e) {
+  const msg = where + ': ' + (e && e.message || e);
+  if (_seenErr.has(msg)) return; _seenErr.add(msg);
+  console.error(e);
+  try { hudFeedText('Error — ' + msg, 15); } catch (_) {}
+}
+window.addEventListener('error', e => reportError('script', e.error || e.message));
+// Ask before the tab closes mid-match (catches Ctrl+W and stray clicks on X)
+window.addEventListener('beforeunload', e => { if (GAME.running) { e.preventDefault(); e.returnValue = ''; } });
 let last = performance.now();
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, Math.max(0, (now - last) / 1000)); last = now;
+  // each system on its own, so one error can't freeze the rest of the game
+  const run = (name, fn) => { try { fn(dt); } catch (e) { reportError(name, e); } };
   if (GAME.running) {
-    playerTick(dt);
-    botsTick(dt);
-    remotesTick(dt);
-    netTick(dt);
-    hudTick(dt);
+    run('player', playerTick); run('bots', botsTick); run('remotes', remotesTick); run('net', netTick); run('hud', hudTick);
     if (!INPUT.locked && PL.alive && $('pause').hidden && $('menu').hidden) $('hint').textContent = 'Click to play';
-  } else { menuCam(dt); remotesTick(dt); }
-  fxTick(dt);
-  previewTick(dt);
+  } else { run('menu', menuCam); run('remotes', remotesTick); }
+  run('fx', fxTick);
+  run('preview', previewTick);
   // shadows follow the camera
   const f = CAMERA.position;
   SUN.position.set(f.x - 120 * 0.4, 140 * 0.4, f.z + 90 * 0.4); SUN.target.position.set(f.x, 0, f.z); SUN.target.updateMatrixWorld();

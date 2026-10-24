@@ -159,7 +159,7 @@ function buildOperator(outfitKey = 'ranger', skinIdx = 0) {
   return op;
 }
 function setOperatorGun(op, id, mods) {
-  if (op.gun) { op.gunHolder.remove(op.gun.group); }
+  if (op.gun) { op.gunHolder.remove(op.gun.group); op.gun.group.traverse(m => { if (m.isMesh) m.geometry.dispose(); }); }   // geometries are merged per gun, so they're safe to free
   const m = buildGun(id, mods, true); op.gun = m; op.gunId = id; op.gunKey = id + JSON.stringify(mods || {});
   op.gunHolder.add(m.group);
 }

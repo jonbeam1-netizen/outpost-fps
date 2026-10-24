@@ -43,7 +43,7 @@ function supportY(x, z, maxTop) {
 function playerPhysics(dt) {
   const k = INPUT.keys, p = PL.pos, v = PL.vel;
   // crouch toggle (C) — standing up needs head room
-  if (INPUT.pressed.KeyC || INPUT.pressed.ControlLeft) {
+  if (INPUT.pressed.KeyC) {   // not Ctrl: Ctrl+W would close the browser tab
     if (PL.crouch) { if (!boxHits(p.x, p.z, p.y + H_CROUCH, p.y + H_STAND, R_PLAYER - 0.02)) PL.crouch = false; }
     else PL.crouch = true;
   }
@@ -289,8 +289,10 @@ function vmInit() {
   VM.flashLight = new THREE.PointLight(0xffb060, 0, 1.5, 2); VMSCENE.add(VM.flashLight);
 }
 function buildViewmodel() {
-  if (VM.pivot) VM.root.remove(VM.pivot);
-  VM.arms.forEach(a => { VM.root.remove(a.upper); VM.root.remove(a.lower); VM.root.remove(a.hand); });
+  // free the old model's GPU buffers (gun materials are shared, the arm materials are per build)
+  const free = (o, mats) => o.traverse(m => { if (m.isMesh) { m.geometry.dispose(); if (mats) m.material.dispose(); } });
+  if (VM.pivot) { VM.root.remove(VM.pivot); free(VM.pivot, false); }
+  VM.arms.forEach(a => { [a.upper, a.lower, a.hand].forEach(o => { VM.root.remove(o); free(o, true); }); });
   const w = curW(); if (!w) return;
   VM.pivot = new THREE.Group(); VM.root.add(VM.pivot);
   VM.gun = buildGun(w.id, w.mods, false); VM.pivot.add(VM.gun.group);
@@ -403,6 +405,7 @@ function respawn() {
 }
 function playerDied(killerId) {
   PL.alive = false; PL.deathTime = performance.now(); PL.killerId = killerId; PL.reloading = false;
+  PL.scoped = false; PL.adsT = 0; PL.ads = false; PL.adsToggle = false;
   VM.root.visible = false;
 }
 function deathCam(dt) {
