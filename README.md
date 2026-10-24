@@ -17,7 +17,11 @@ one player hosts and gets a code like `DM-7K2F`, friends type the code to join. 
 - **Host:** press HOST GAME. The code shows in the top-left corner and in the pause menu (click it to copy).
 - **Join:** type the code and press JOIN.
 - **Practice:** press PRACTICE to play offline against bots (`/addbot 4`).
-- Unlimited free-for-all. If the host closes the tab, the match ends for everyone.
+- **Modes** (pause menu, or type `/mode lms` / `/mode ffa`):
+  - **Free-for-all** — unlimited respawns.
+  - **Last Sniper Standing** — one life each. When one sniper is left they win the round (★ on the scoreboard),
+    and after a few seconds everyone drops back in for the next round. Bots count as players.
+- If the host closes the tab, the match ends for everyone.
 
 | Key | Action |
 | --- | --- |
@@ -70,6 +74,7 @@ Type in the chat box (Enter), or use the + BOT / − BOT buttons in the pause me
 - `/addbot` or `/addbot 3` — add bots (up to 10)
 - `/removebot`, `/removebot 2`, `/removebot all` — remove bots
 - `/botdiff easy|normal|hard` — bot skill
+- `/mode lms` or `/mode ffa` — switch game mode
 
 Bots run on the host's computer. They pick sniper nests, glass the streets through their scopes, relocate after
 shooting, compensate for drop, hear unsuppressed gunshots, and go for the knife up close.

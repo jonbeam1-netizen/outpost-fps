@@ -304,7 +304,7 @@ function botsTick(dt) {
   if (!botsAllowed() || !BOTS.size) return;
   const now = performance.now(), diff = BOT_DIFF[BOTCFG.diff];
   BOTS.forEach(b => {
-    if (!b.alive) { if (now - b.deadAt > 5000) botRespawn(b); botSend(b, dt); return; }
+    if (!b.alive) { if (now - b.deadAt > 5000 && roundCanRespawn()) botRespawn(b); botSend(b, dt); return; }
     b.thinkT -= dt; if (b.thinkT <= 0) { const step = 0.2 + Math.random() * 0.1; b.thinkT = step; botThink(b, step); }
     if (b.stabT > 0 && (b.stabT -= dt) <= 0) {
       const eye = botEye(b, new V3()), v = knifeTarget(eye, b.yaw, 0, matchBodies(b.id));

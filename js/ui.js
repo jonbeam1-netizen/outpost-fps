@@ -99,6 +99,13 @@ function suitSwatch(o) {
   return blots.join(',') + `, linear-gradient(135deg, ${o.base}, ${o.c1})`;
 }
 const shortGun = id => ({ m200: 'CheyTac M200', m82: 'Barrett M82' })[id] || WEAPONS[id].name;
+// swap guns right away if you haven't joined the fight yet; otherwise it waits for the next respawn
+function applyLoadoutNow() {
+  if (!GAME.running || !PL.alive) return;
+  const fresh = performance.now() - PL.spawnTime < 15000 && PL.hp >= 100 && PL.weapons.every(w => w.def.melee || w.ammo === w.def.mag);
+  if (fresh) { equipLoadout(LOADOUT); hudCenter('LOADOUT APPLIED', 1.5); }
+  else hudCenter('LOADOUT APPLIES ON NEXT RESPAWN', 2);
+}
 function saveLoadout() { store.set('holdover-loadout', LOADOUT); }
 function refreshLoadout() {
   const id = LOADOUT.primary, def = WEAPONS[id], mods = LOADOUT.mods[id];
@@ -150,7 +157,7 @@ function showMenu(ingame) {
   $('menu').scrollTop = 0;
   let done = $('btnLoadDone');
   if (ingame) {
-    if (!done) { done = document.createElement('button'); done.id = 'btnLoadDone'; done.className = 'primary'; done.textContent = 'DONE — APPLIES ON NEXT RESPAWN'; done.onclick = () => { $('menu').hidden = true; $('pause').hidden = false; $('btnResume').focus(); }; document.querySelector('.loadout').appendChild(done); }
+    if (!done) { done = document.createElement('button'); done.id = 'btnLoadDone'; done.className = 'primary'; done.textContent = 'DONE'; done.onclick = () => { $('menu').hidden = true; $('pause').hidden = false; $('btnResume').focus(); applyLoadoutNow(); }; document.querySelector('.loadout').appendChild(done); }
     done.hidden = false;
   } else if (done) done.hidden = true;
 }
@@ -161,6 +168,7 @@ function pauseUI() {
   $('btnLoadout').onclick = () => { $('pause').hidden = true; showMenu(true); refreshLoadout(); };
   $('btnLeave').onclick = () => leaveToMenu();
   $('btnAddBot').onclick = () => addBots(1);
+  $('gameMode').onchange = e => setGameMode(e.target.value);
   $('btnRemoveBot').onclick = () => removeBots(1);
   $('botDiff').onchange = e => setBotDiff(e.target.value);
   // chat / command line
@@ -186,6 +194,7 @@ function runCmd(text) {
   if (c === 'addbot' || c === 'addbots' || c === 'bot') addBots(n === 'all' ? BOTCFG.max : n);
   else if (c === 'removebot' || c === 'removebots' || c === 'kickbot') removeBots(n);
   else if (c === 'botdiff' || c === 'difficulty') { setBotDiff(arg); if (BOT_DIFF[arg]) $('botDiff').value = arg; }
+  else if (c === 'mode') { if (arg === 'lms' || arg === 'last' || arg === 'ffa') setGameMode(arg); else hudFeedText('/mode lms (last sniper standing) or /mode ffa'); }
   else if (c === 'help') hudFeedText('/addbot [n] · /removebot [n|all] · /botdiff easy|normal|hard', 8);
   else hudFeedText('Unknown command. Try /help');
 }
@@ -233,6 +242,7 @@ function startOffline() {
   startGame();
 }
 function leaveToMenu(msg) {
+  ROUND.mode = 'ffa'; ROUND.state = 'idle'; ROUND.spectating = false; $('gameMode').value = 'ffa';
   netLeave(); GAME.running = false; PL.alive = false; closeCmd(); pickupsClear(); PROJ.forEach(pr => { if (pr.fx && pr.fx.end) pr.fx.end(); }); PROJ.length = 0; SFX.ambient(false); SFX.heartbeat(0);
   try { document.exitPointerLock(); } catch (e) {}
   releaseFullscreen();
@@ -411,10 +421,13 @@ function hudTick(dt) {
   HUD.feed = HUD.feed.filter(f => { f.t -= dt; if (f.t < 1) f.el.style.opacity = clamp(f.t, 0, 1); if (f.t <= 0) { f.el.remove(); return false; } return true; });
   if (HUD.centerT > 0) { HUD.centerT -= dt; if (HUD.centerT <= 0) $('centerMsg').style.opacity = 0; }
   // death countdown → respawn
-  if (!PL.alive && GAME.running && HUD.deathT > 0) {
-    HUD.deathT -= dt; $('dsTimer').textContent = 'REDEPLOY IN ' + Math.max(0, HUD.deathT).toFixed(1) + 's';
-    $('dsBarFill').style.width = (clamp(1 - HUD.deathT / HUD.deathMax, 0, 1) * 100) + '%';
-    if (HUD.deathT <= 0) respawn();
+  if (!PL.alive && GAME.running && (HUD.deathT > 0 || !roundCanRespawn())) {
+    HUD.deathT -= dt;
+    if (roundCanRespawn()) {
+      $('dsTimer').textContent = 'REDEPLOY IN ' + Math.max(0, HUD.deathT).toFixed(1) + 's';
+      $('dsBarFill').style.width = (clamp(1 - HUD.deathT / HUD.deathMax, 0, 1) * 100) + '%';
+      if (HUD.deathT <= 0) respawn();
+    } else { $('dsTimer').textContent = roundDeadText(); $('dsBarFill').style.width = '100%'; }   // one life: wait out the round
   }
   // scoreboard (Tab)
   const sb = $('scoreboard'), show = !!INPUT.keys.Tab;
@@ -425,7 +438,7 @@ function hudTick(dt) {
     if (Object.keys(NET.players).length) for (const id in NET.players) { const p = NET.players[id]; rows.push({ id, name: p.name, outfit: p.outfit, k: p.k, d: p.d }); }
     else rows.push({ id: 'me', name: PROFILE.name || 'You', outfit: PL.outfit, k: PL.kills, d: PL.deaths });
     rows.sort((a, b) => b.k - a.k || a.d - b.d);
-    $('sbBody').innerHTML = rows.map(r => `<tr class="${r.id === NET.myId || r.id === 'me' ? 'me' : ''}"><td><span class="dot" style="background:${(OUTFITS[r.outfit] || Object.values(OUTFITS)[0]).base}"></span>${escapeHtml(r.name)}</td><td>${r.k}</td><td>${r.d}</td><td>${(r.k / Math.max(1, r.d)).toFixed(2)}</td></tr>`).join('');
+    $('sbBody').innerHTML = rows.map(r => `<tr class="${r.id === NET.myId || r.id === 'me' ? 'me' : ''}"><td><span class="dot" style="background:${(OUTFITS[r.outfit] || Object.values(OUTFITS)[0]).base}"></span>${escapeHtml(r.name)}${NET.players[r.id] && NET.players[r.id].w ? ' <span class="wins">★' + NET.players[r.id].w + '</span>' : ''}</td><td>${r.k}</td><td>${r.d}</td><td>${(r.k / Math.max(1, r.d)).toFixed(2)}</td></tr>`).join('');
   }
   // name of whoever is under the crosshair (only if you can actually see them)
   if ((_tnT -= dt) <= 0) {

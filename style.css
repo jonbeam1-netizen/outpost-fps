@@ -295,6 +295,7 @@ kbd { font-family: var(--f-mono); font-size: 12px; color: var(--text); backgroun
 #scoreboard tbody tr:first-child td:first-child::before { color: var(--accent); }
 #scoreboard tr.me td { color: var(--accent); background: rgba(215,156,92,0.08); }
 #scoreboard td:nth-child(n+2), #scoreboard th:nth-child(n+2) { text-align: right; font-family: var(--f-mono); width: 56px; }
+#scoreboard .wins { color: var(--accent); font-size: 0.85em; margin-left: 6px; }
 #scoreboard .dot { display: inline-block; width: 9px; height: 9px; margin-right: 8px; border: 1px solid rgba(0,0,0,0.6); transform: rotate(45deg); }
 
 /* death: keep the middle clear, the camera is looking at whoever shot you */

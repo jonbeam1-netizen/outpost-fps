@@ -9,7 +9,13 @@ const netSendTo = (c, m) => { try { if (c && c.open) c.send(m); } catch (e) {} }
 const netBroadcast = (m, except) => NET.conns.forEach((c, id) => { if (id !== except) netSendTo(c, m); });
 const netCode = () => { const A = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; let c = ''; for (let i = 0; i < 4; i++) c += A[Math.floor(Math.random() * A.length)]; return 'DM-' + c; };
 const netPeerId = code => 'holdover-fps-' + code.toLowerCase().replace(/[^a-z0-9-]/g, '');
-const myProfile = () => ({ name: PROFILE.name || 'Operator', outfit: PROFILE.outfit, skin: PROFILE.skin });
+const myProfile = () => ({ name: PROFILE.name || 'Sniper', outfit: PROFILE.outfit, skin: PROFILE.skin });
+// "Sniper", "Sniper 2", "Sniper 3"… so two people with the same callsign can tell who's who
+function uniqueName(n) {
+  const taken = new Set(Object.values(NET.players).map(p => p.name));
+  if (!taken.has(n)) return n;
+  for (let i = 2; ; i++) { const c = (n.slice(0, 11) + ' ' + i); if (!taken.has(c)) return c; }
+}
 
 // a message from us: the host handles it directly, a client sends it to the host
 function netOut(m) {
@@ -22,9 +28,9 @@ function hostReceive(from, m) {
   const P = NET.players;
   switch (m.t) {
     case 'hello': {
-      P[from] = { name: String(m.name || 'Operator').slice(0, 14), outfit: OUTFITS[m.outfit] ? m.outfit : 'woodland', skin: (m.skin | 0) % SKINS.length, k: 0, d: 0 };
+      P[from] = { name: uniqueName(String(m.name || 'Sniper').slice(0, 14)), outfit: OUTFITS[m.outfit] ? m.outfit : 'woodland', skin: (m.skin | 0) % SKINS.length, k: 0, d: 0 };
       const c = NET.conns.get(from);
-      netSendTo(c, { t: 'welcome', you: from, players: P, pk: pickupSnapshot() });
+      netSendTo(c, { t: 'welcome', you: from, players: P, pk: pickupSnapshot(), round: { t: 'round', mode: ROUND.mode, state: ROUND.state, n: ROUND.n, wins: roundWins() } });
       netBroadcast({ t: 'join', id: from, p: P[from] }, from);
       clientReceive({ t: 'join', id: from, p: P[from] });
       hudFeedText(P[from].name + ' joined');
@@ -47,6 +53,7 @@ function hostReceive(from, m) {
       if (m.c === 'addbot') addBots(clamp(m.n | 0 || 1, 1, 10));
       else if (m.c === 'removebot') removeBots(m.n === 'all' ? 'all' : clamp(m.n | 0 || 1, 1, 10));
       else if (m.c === 'botdiff') setBotDiff(String(m.d));
+      else if (m.c === 'mode') setGameMode(String(m.m));
       if (P[from] && from !== NET.myId) hudFeedText(P[from].name + ' used /' + m.c);
       break;
     }
@@ -145,7 +152,9 @@ function clientReceive(m) {
       NET.myId = m.you; NET.players = Object.assign(NET.players || {}, m.players || {});   // merge: a 'join' may have beaten the welcome here
       for (const id in NET.players) addRemote(id, NET.players[id]);
       if (m.pk) pickupApplySnapshot(m.pk);
-      startGame(); break;
+      startGame();
+      if (m.round) roundApply(m.round, true);
+      break;
     }
     case 'join': NET.players[m.id] = m.p; addRemote(m.id, m.p); if (!NET.host) hudFeedText(m.p.name + ' joined'); break;
     case 'bye': { const r = REMOTES.get(m.id); if (r) { SCENE.remove(r.op.root); freeOperator(r.op); REMOTES.delete(m.id); if (!NET.host) hudFeedText(r.name + ' left'); } delete NET.players[m.id]; break; }
@@ -161,6 +170,7 @@ function clientReceive(m) {
     case 'shot': remoteShot(m); break;
     case 'fx': if (m.k === 'blood' && Array.isArray(m.p) && Array.isArray(m.d)) { const p = new V3(m.p[0], m.p[1], m.p[2]); fxBlood(p, new V3(m.d[0], m.d[1], m.d[2]), m.h ? 1.6 : 1, !!m.h); SFX.fleshHit(p, !!m.h); } break;
     case 'pk': pickupApply(m); break;
+    case 'round': roundApply(m, false); break;
     case 'hit': takeDamage(m.dmg, m.by, m.zone, m.w); break;
     case 'kill': {
       if (m.sc) for (const id in m.sc) { if (NET.players[id]) { NET.players[id].k = m.sc[id][0]; NET.players[id].d = m.sc[id][1]; } }

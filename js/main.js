@@ -20,6 +20,8 @@ function onResize() {
   CAMERA.aspect = w / h; CAMERA.updateProjectionMatrix(); VMCAM.aspect = w / h; VMCAM.updateProjectionMatrix();
   applyGraphics();
 }
+const killcamOn = () => typeof KC !== 'undefined' && !!(KC.on || KC.armed);
+let _kcWas = false;
 let SUN_DIR = new V3(-0.6, 0.18, 0.4).normalize();
 // Dusk sky: gradient from the map's colours, a warm glow around the low sun, a layer of drifting cloud
 function buildSky() {
@@ -121,10 +123,12 @@ function inputInit() {
   window.addEventListener('mousemove', e => { if (INPUT.locked) { INPUT.dx += e.movementX; INPUT.dy += e.movementY; } });
   window.addEventListener('wheel', e => { if (INPUT.locked) INPUT.wheel += Math.sign(e.deltaY); }, { passive: true });
   // leaving fullscreen (holding Esc) also releases the keyboard: show the pause menu
-  document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && GAME.running && !INPUT.locked && $('menu').hidden) $('pause').hidden = false; });
+  document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && GAME.running && !INPUT.locked && $('menu').hidden && !killcamOn()) $('pause').hidden = false; });
+  // if the pointer came loose during the kill cam, bring the pause menu up once it ends
+  setInterval(() => { if (GAME.running && !INPUT.locked && _kcWas && !killcamOn() && $('menu').hidden && $('settings').hidden && $('pause').hidden) $('pause').hidden = false; _kcWas = killcamOn(); }, 250);
   document.addEventListener('pointerlockchange', () => {
     INPUT.locked = document.pointerLockElement === canvas;
-    if (!INPUT.locked) { INPUT.mouse.l = INPUT.mouse.r = false; closeCmd(); if (GAME.running && $('menu').hidden && $('settings').hidden) $('pause').hidden = false; }
+    if (!INPUT.locked) { INPUT.mouse.l = INPUT.mouse.r = false; closeCmd(); if (GAME.running && $('menu').hidden && $('settings').hidden && !killcamOn()) $('pause').hidden = false; }
     else { $('pause').hidden = true; $('hint').textContent = ''; }
   });
 }
@@ -154,7 +158,7 @@ function frame(now) {
   // each system on its own, so one error can't freeze the rest of the game
   const run = (name, fn) => { try { fn(dt); } catch (e) { reportError(name, e); } };
   if (GAME.running) {
-    run('player', playerTick); run('bots', botsTick); run('remotes', remotesTick); run('pickups', pickupsTick); run('wildlife', wildlifeTick); run('net', netTick); run('hud', hudTick);
+    run('player', playerTick); run('bots', botsTick); run('remotes', remotesTick); run('pickups', pickupsTick); run('round', roundTick); run('wildlife', wildlifeTick); run('net', netTick); run('hud', hudTick);
     if (!INPUT.locked && PL.alive && $('pause').hidden && $('menu').hidden) $('hint').textContent = 'Click to play';
   } else { run('menu', menuCam); run('remotes', remotesTick); run('wildlife', wildlifeTick); }
   run('fx', fxTick);
