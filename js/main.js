@@ -71,6 +71,8 @@ function boot() {
   RENDERER.toneMappingExposure = A.exposure || 0.9;
   SCENE.fog = new THREE.Fog(A.fog !== undefined ? A.fog : 0x8a7f72, A.fogNear || 40, A.fogFar || 420);
   HEMI = new THREE.HemisphereLight(A.hemiSky !== undefined ? A.hemiSky : 0x8a95a8, A.hemiGround !== undefined ? A.hemiGround : 0x3e3628, A.hemiInt || 0.55); SCENE.add(HEMI);
+  // a soft, even fill so shadowed corners and interiors never go pitch black
+  SCENE.add(new THREE.AmbientLight(0x8a8478, A.ambInt !== undefined ? A.ambInt : 0.32));
   if (A.sunDir) SUN_DIR = new V3(A.sunDir[0], A.sunDir[1], A.sunDir[2]).normalize();
   SUN = new THREE.DirectionalLight(A.sunColor !== undefined ? A.sunColor : 0xffb070, A.sunInt || 1.8);
   SUN.shadow.camera.left = -70; SUN.shadow.camera.right = 70; SUN.shadow.camera.top = 70; SUN.shadow.camera.bottom = -70;
