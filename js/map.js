@@ -114,10 +114,10 @@ function mapTextures() {
     grain(g, w, h, 30);
   });
   TX.burnt = canvasTex(256, 256, (g, w, h) => {
-    g.fillStyle = '#26211d'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#3b342e'; g.fillRect(0, 0, w, h);
     blotches(g, w, h, 70, 3, 14, () => `rgba(${R(80, 110) | 0},${R(46, 60) | 0},${R(26, 36) | 0},${R(0.25, 0.5)})`);
     blotches(g, w, h, 20, 4, 18, () => `rgba(${R(60, 80) | 0},${R(56, 66) | 0},${R(50, 58) | 0},0.4)`);
-    dots(g, w, h, 600, () => `rgba(10,8,6,${R(0.3, 0.8)})`, 1, 4);
+    dots(g, w, h, 600, () => `rgba(24,20,17,${R(0.3, 0.7)})`, 1, 4);
     grain(g, w, h, 26);
   });
   TX.rubble = canvasTex(256, 256, (g, w, h) => {
@@ -331,7 +331,7 @@ function dirtify(m, grime = 1) {
         diffuseColor.rgb *= 1.0 + mn * 0.08;
         vec4 oc = texture2D(tOcc, (vWP.xz + 160.0) / 320.0);
         float occ = oc.r * step(vWP.y, oc.g * 63.75 - 20.0);
-        diffuseColor.rgb *= 1.0 - occ * 0.6;
+        diffuseColor.rgb *= 1.0 - occ * 0.4;
       }`);
   };
   m.userData.grime = grime;
@@ -347,13 +347,14 @@ function mapMaterials() {
   M.stone = std({ map: TX.stone, color: 0xa8a297 }, 3.4);
   M.wood = std({ map: TX.wood }, 2); M.woodD = std({ map: TX.wood, color: 0x6e645a }, 2);
   M.roof = std({ map: TX.roof }, 2.4);
-  M.corr = std({ map: TX.corr, roughness: 0.75, metalness: 0.3 }, 3); M.corrG = std({ map: TX.corr, color: 0x8d9a8c, roughness: 0.75, metalness: 0.3 }, 3);
-  M.rust = std({ map: TX.rust, roughness: 0.8, metalness: 0.35 }, 1.4); M.metal = std({ map: TX.rust, color: 0x6d6e6c, roughness: 0.6, metalness: 0.5 }, 1.4);
-  M.burnt = std({ map: TX.burnt, roughness: 0.9, metalness: 0.25 }, 2.2);
+  M.corr = std({ map: TX.corr, roughness: 0.75, metalness: 0.15 }, 3); M.corrG = std({ map: TX.corr, color: 0x8d9a8c, roughness: 0.75, metalness: 0.15 }, 3);
+  // metalness with no env map just kills the diffuse light: indoors these read as black, so keep metals mostly diffuse
+  M.rust = std({ map: TX.rust, roughness: 0.8, metalness: 0.15 }, 1.4); M.metal = std({ map: TX.rust, color: 0x8c8d8a, roughness: 0.65, metalness: 0.2 }, 1.4);
+  M.burnt = std({ map: TX.burnt, roughness: 0.9, metalness: 0.1 }, 2.2);
   M.rubble = std({ map: TX.rubble, color: 0xb8b0a6 }, 1.6);
   M.asphalt = std({ map: TX.asphalt }, 1, 0); M.paving = std({ map: TX.paving, color: 0x9a948a }, 1, 0); M.cobble = std({ map: TX.cobble }, 1, 0); M.dirtRoad = std({ map: TX.dirtRoad }, 1, 0);
   M.bark = std({ map: TX.bark }, 1.3, 0.6);
-  M.dark = std({ color: 0x151412, roughness: 1 }, 1, 0);
+  M.dark = std({ color: 0x2e2a26, roughness: 1 }, 1, 0);   // dark grey, not a black hole
   // interior floors: no ground grime (the interior mask already darkens them), or a ground floor reads as a black void
   M.floor = std({ map: TX.conc, color: 0xd2cec6 }, 3, 0.15); M.floorW = std({ map: TX.wood, color: 0xe0d4c0 }, 2, 0.15);
   M.pipe = std({ map: TX.conc, color: 0x77746c, side: THREE.DoubleSide }, 2);
@@ -569,7 +570,7 @@ function occRect(x0, z0, x1, z1, amt, ceil) {
 }
 function occAt(x, z, y) {   // 0..1 how dark it is here (character.js can dim players standing in dark rooms)
   const i = Math.floor((x + 160) * 2), j = Math.floor((z + 160) * 2); if (i < 0 || j < 0 || i >= OCC.n || j >= OCC.n) return 0;
-  const k = (j * OCC.n + i) * 4; return y < OCC.d[k + 1] / 4 - 20 ? OCC.d[k] / 255 * 0.6 : 0;
+  const k = (j * OCC.n + i) * 4; return y < OCC.d[k + 1] / 4 - 20 ? OCC.d[k] / 255 * 0.4 : 0;
 }
 
 // ---------- Ribbons: roads, pavements, paths, water ----------
@@ -632,15 +633,54 @@ function wallMesh(sd, top, ops, mat, cm = 'concrete') {
     else { p.moveTo(o.u0, o.v0); p.lineTo(o.u1, o.v0); p.lineTo(o.u1, o.v1); p.lineTo(o.u0, o.v1); }
     sh.holes.push(p);
   });
-  const g = new THREE.ExtrudeGeometry(sh, { depth: t, bevelEnabled: false, curveSegments: 7 });
+  const g = new THREE.ExtrudeGeometry(sh, { depth: t, bevelEnabled: false, curveSegments: WALL_SEG });
+  revealFix(g, sh, mat.userData.s || 3, sd.a0, sd.yb, sd.ax === 'x' ? sd.c - t / 2 : sd.c + t / 2, sd.ax === 'x' ? 1 : -1);
   if (sd.ax === 'x') g.translate(sd.a0, sd.yb, sd.c - t / 2); else { g.rotateY(-Math.PI / 2); g.translate(sd.c + t / 2, sd.yb, sd.a0); }
-  staticAdd(g, mat, mat.userData.s || 3);
+  staticAdd(g, mat, mat.userData.s || 3, true);
   if (cm) wallColl(sd, top, ops, cm);
+}
+// The extruded sides (door/window reveals, wall ends, the broken top) would get flat per-facet normals and the
+// dominant-axis world UVs, which flip between two projections around an arch: stepped shading, bricks turned 90 deg.
+// Instead: caps keep the wall-face projection (u along the wall, v up); sides get u = world depth across the wall and
+// v = height on vertical runs, then distance along the edge from there, so courses line up with the wall face on a jamb
+// and run on unbroken over the soffit (two walls back to back meet seamlessly); normals are smoothed across shallow
+// facet angles (the curve) but kept sharp at real corners.
+const WALL_SEG = 12;
+function revealFix(g, sh, sc, ou, ov, d0, ds) {
+  const pos = g.attributes.position, nrm = g.attributes.normal, N = pos.count, uv = new Float32Array(N * 2);
+  const side = g.groups.find(q => q.materialIndex === 1) || { start: N, count: 0 }, s0 = side.start, s1 = side.start + side.count;
+  for (let i = 0; i < N; i++) if (i < s0 || i >= s1) { uv[i * 2] = (pos.getX(i) + ou) / sc; uv[i * 2 + 1] = (pos.getY(i) + ov) / sc; }   // caps: same as the world projection
+  // v at both ends of every outline segment
+  const key = (x, y) => Math.round(x * 500) + ',' + Math.round(y * 500), seg = new Map(), ex = sh.extractPoints(WALL_SEG);
+  [ex.shape, ...ex.holes].forEach(c => { let s = c[0].y;
+    c.forEach((A, i) => { const B = c[(i + 1) % c.length], ka = key(A.x, A.y), kb = key(B.x, B.y); if (ka === kb) return; let sa, sb;
+      if (Math.abs(A.x - B.x) < 1e-4) { sa = A.y; sb = B.y; } else { sa = s; sb = s + A.distanceTo(B); } s = sb;
+      seg.set(ka + '|' + kb, [sa, sb]); seg.set(kb + '|' + ka, [sb, sa]); }); });
+  // facet normals of the side quads (they lie in the shape plane), gathered per outline point
+  const fn = [], at = new Map();
+  for (let i = s0; i < s1; i += 3) {
+    const ax = pos.getX(i), ay = pos.getY(i), bx = pos.getX(i + 1), by = pos.getY(i + 1), cx = pos.getX(i + 2), cy = pos.getY(i + 2), az = pos.getZ(i), bz = pos.getZ(i + 1), cz = pos.getZ(i + 2);
+    const ux = bx - ax, uy = by - ay, uz = bz - az, vx = cx - ax, vy = cy - ay, vz = cz - az;
+    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz; const l = Math.hypot(nx, ny); if (l > 1e-9) { nx /= l; ny /= l; } else nx = ny = 0;
+    fn.push(nx, ny);
+    for (let j = 0; j < 3; j++) { const k = key(pos.getX(i + j), pos.getY(i + j)); if (!at.has(k)) at.set(k, []); at.get(k).push((i - s0) / 3); }
+  }
+  for (let i = s0; i < s1; i += 3) {
+    const f = (i - s0) / 3, fx = fn[f * 2], fy = fn[f * 2 + 1], ks = [];
+    for (let j = 0; j < 3; j++) {
+      const v = i + j, k = key(pos.getX(v), pos.getY(v)); ks.push(k);
+      if (fx || fy) { let sx = 0, sy = 0; at.get(k).forEach(o => { const ox = fn[o * 2], oy = fn[o * 2 + 1]; if (ox * fx + oy * fy > 0.82) { sx += ox; sy += oy; } }); const l = Math.hypot(sx, sy) || 1; nrm.setXYZ(v, sx / l, sy / l, 0); }
+    }
+    const u = [...new Set(ks)], sg = u.length === 2 ? seg.get(u[0] + '|' + u[1]) : null;
+    for (let j = 0; j < 3; j++) { const sv = sg ? sg[ks[j] === u[0] ? 0 : 1] : pos.getY(i + j); uv[(i + j) * 2] = (d0 + ds * pos.getZ(i + j)) / sc; uv[(i + j) * 2 + 1] = (sv + ov) / sc; }
+  }
+  nrm.needsUpdate = true; g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
 }
 // colliders: slice at every opening edge and profile vertex, solid ranges per slice, then merge equal neighbours.
 // Tops round DOWN so a collider never pokes above the broken edge you can see.
-// Arches, round windows and blast holes are cut as a stack of bands that follow the outline (chord at mid-band),
-// so there is no invisible lip at an arch crown and no hidden ring around a shell hole.
+// Arches, round windows and blast holes are cut as a stack of bands that follow the outline, each band as wide as the
+// opening is at its widest within it (the exact circle for arches and round windows): the stepped collider then always
+// sits inside the visible stone, never as an invisible lip in the open passage.
 function opOutline(o) {
   if (o.poly) return o.poly;
   const r = (o.u1 - o.u0) / 2, uc = (o.u0 + o.u1) / 2, p = [];
@@ -651,10 +691,13 @@ function opBands(o) {
   if (!o.poly && !o.arch && !o.round) return [o];
   const P = opOutline(o), vs = P.map(q => q[1]), vmin = Math.min(...vs), vmax = Math.max(...vs), out = [];
   const chord = v => { let a = 1e9, b = -1e9; for (let i = 0; i < P.length; i++) { const p = P[i], q = P[(i + 1) % P.length]; if ((p[1] - v) * (q[1] - v) > 0 || p[1] === q[1]) continue; const u = p[0] + (q[0] - p[0]) * (v - p[1]) / (q[1] - p[1]); a = Math.min(a, u); b = Math.max(b, u); } return [a, b]; };
+  const r = (o.u1 - o.u0) / 2, uc = (o.u0 + o.u1) / 2, vc = o.arch ? o.v1 - r : (o.v0 + o.v1) / 2;
+  const widest = (va, vb) => { if (!o.poly) { const h = r * Math.sqrt(Math.max(0, 1 - ((clamp(vc, va, vb) - vc) / r) ** 2)); return [uc - h, uc + h]; }
+    let a = 1e9, b = -1e9; for (let k = 0; k <= 4; k++) { const [p, q] = chord(lerp(va, vb, lerp(0.01, 0.99, k / 4))); a = Math.min(a, p); b = Math.max(b, q); } return [a, b]; };
   let edges;
-  if (o.arch) { const r = (o.u1 - o.u0) / 2, sv = o.v1 - r; out.push({ cu0: o.u0, cu1: o.u1, cv0: vmin, cv1: sv }); edges = [0, 0.3, 0.55, 0.75, 0.9, 1].map(k => sv + r * k); }
+  if (o.arch) { out.push({ cu0: o.u0, cu1: o.u1, cv0: vmin, cv1: vc }); edges = [0, 0.2, 0.4, 0.55, 0.7, 0.8, 0.9, 0.96, 1].map(k => vc + r * k); }
   else { const nb = Math.max(3, Math.min(7, Math.round((vmax - vmin) / 0.3))); edges = []; for (let i = 0; i <= nb; i++) edges.push(lerp(vmin, vmax, i / nb)); }
-  for (let i = 0; i < edges.length - 1; i++) { const [a, b] = chord((edges[i] + edges[i + 1]) / 2); if (b - a > 0.08) out.push({ cu0: a, cu1: b, cv0: edges[i], cv1: edges[i + 1] }); }
+  for (let i = 0; i < edges.length - 1; i++) { const [a, b] = widest(edges[i], edges[i + 1]); if (b - a > 0.08) out.push({ cu0: a, cu1: b, cv0: edges[i], cv1: edges[i + 1] }); }
   return out;
 }
 function wallColl(sd, top, ops0, cm) {
@@ -943,6 +986,12 @@ function poleLine(P, off, spacing, s0 = 0, s1 = 1e9) {
 }
 
 // ---------- Buildings ----------
+// the walk-in lane inside a door: at least 1.7 m wide (the whole door if it is wider), 2.9 m deep from the inner wall face
+function doorLane(d, ext = 0) {
+  const hw = Math.max(0.85, d.w / 2) + ext, a = d.t / 2 - ext, b = d.t / 2 + 2.9 + ext, x = d[0], z = d[2], p = d.inw * a, q = d.inw * b;
+  return d.ax === 'x' ? [x - hw, z + Math.min(p, q), x + hw, z + Math.max(p, q)] : [x + Math.min(p, q), z - hw, x + Math.max(p, q), z + hw];
+}
+const inLane = (doors, x0, z0, x1, z1, y) => doors.some(d => { if (Math.abs(d[1] - y) > 1) return false; const r = doorLane(d); return x1 > r[0] && x0 < r[2] && z1 > r[1] && z0 < r[3]; });
 // o: {x0,z0,x1,z1, g, n floors, FH, mat, roof:'flat'|'gable'|'none', ruin 0..1, doors:[[side, frac, width]], shop:'S',
 //     stair:'NE'.., access (stairs to the roof), win:{w,h,b,arch}, par, trim}
 function bldg(o) {
@@ -957,6 +1006,15 @@ function bldg(o) {
     W: { ax: 'z', a0: z0 + t, L: D - 2 * t, c: x0 + t / 2, out: -1, t, yb }, E: { ax: 'z', a0: z0 + t, L: D - 2 * t, c: x1 - t / 2, out: 1, t, yb },
   };
   const sp = o.stair ? stairPlan(x0, z0, x1, z1, t, o.stair, o.stairAx || (W >= D ? 'x' : 'z'), FH) : null;
+  // doors carry their wall frame (ax, width, thickness, which way is in) so furniture can keep their walk-in lane clear;
+  // inner doors (between two joined buildings) get no lantern
+  const regDoor = (sd, u, w, h, inner = false) => { const p = Object.assign(lpt(sd, u, fy - yb, 0), { ax: sd.ax, w, t: sd.t, inw: -sd.out }); bi.doors.push(p); MAP.doors.push({ p: p.slice(), ax: sd.ax, w, h, inner }); };
+  // nudge a door along its wall (up to 0.6 m) so the stair block never pokes into its lane
+  const stairClear = (sd, u, w, lo, hi) => { if (!sp) return u;
+    const r = sp.rect, s0 = (sd.ax === 'x' ? r.x0 : r.z0) - sd.a0, s1 = (sd.ax === 'x' ? r.x1 : r.z1) - sd.a0, lane = doorLane(Object.assign(lpt(sd, u, fy - yb, 0), { ax: sd.ax, w: 1.7, t: sd.t, inw: -sd.out }), 0.05);
+    if (!(lane[2] > r.x0 && lane[0] < r.x1 && lane[3] > r.z0 && lane[1] < r.z1)) return u;
+    const want = (s0 + s1) / 2 < u ? Math.max(u, s1 + 0.95) : Math.min(u, s0 - 0.95);
+    return clamp(clamp(want, u - 0.6, u + 0.6), lo + w / 2, hi - w / 2); };
   const Htop = eave + par - yb, minV = o.minV ?? (fy - yb + Math.min(FH * 0.9, 2.9)), winD = o.win || {};
   for (const k of ['N', 'S', 'W', 'E']) {
     const sd = S[k], L = sd.L, end = gable && (ridgeX ? k === 'W' || k === 'E' : k === 'N' || k === 'S');
@@ -967,13 +1025,13 @@ function bldg(o) {
     for (let b = 0; b < nb; b++) {
       const uc = (b + 0.5) * bw;
       if (doorBay.has(b)) {
-        const w = Math.max(1.5, Math.min(doorBay.get(b) || o.doorW || 1.9, bw - 0.5)), u = clamp(uc, lo + w / 2, hi - w / 2), dh = fy - yb + (o.doorH || 2.4);
-        ops.push({ door: true, u0: u - w / 2, u1: u + w / 2, v0: 0, v1: dh, arch: o.archDoor, cu0: u - w / 2, cu1: u + w / 2, cv0: -1, cv1: dh - (o.archDoor ? w * 0.25 : 0) });
-        bi.doors.push(lpt(sd, u, fy - yb, 0)); MAP.doors.push({ p: lpt(sd, u, fy - yb, 0), ax: sd.ax, w, h: dh - (fy - yb) });
+        const w = Math.max(1.5, Math.min(doorBay.get(b) || o.doorW || 1.9, bw - 0.5)), u = stairClear(sd, clamp(uc, lo + w / 2, hi - w / 2), w, lo, hi), dh = fy - yb + (o.doorH || 2.4);
+        ops.push({ door: true, reg: true, u0: u - w / 2, u1: u + w / 2, v0: 0, v1: dh, arch: o.archDoor, cu0: u - w / 2, cu1: u + w / 2, cv0: -1, cv1: dh - (o.archDoor ? w * 0.25 : 0) });
+        regDoor(sd, u, w, dh - (fy - yb));
       } else if (o.shop && o.shop.includes(k) && chance(0.8)) {
         const w = Math.max(1.5, bw - 0.8), u = clamp(uc, lo + w / 2, hi - w / 2), dh = fy - yb + 2.75;
-        ops.push({ door: true, shop: true, u0: u - w / 2, u1: u + w / 2, v0: 0, v1: dh, cu0: u - w / 2, cu1: u + w / 2, cv0: -1, cv1: dh });
-        bi.doors.push(lpt(sd, u, fy - yb, 0)); MAP.doors.push({ p: lpt(sd, u, fy - yb, 0), ax: sd.ax, w, h: dh - (fy - yb) });
+        ops.push({ door: true, reg: true, shop: true, u0: u - w / 2, u1: u + w / 2, v0: 0, v1: dh, cu0: u - w / 2, cu1: u + w / 2, cv0: -1, cv1: dh });
+        regDoor(sd, u, w, dh - (fy - yb));
       } else if (!chance(o.blank ?? 0.1)) {
         const wd = Math.min(winD.w ?? 1.25, bw - 0.7), u = clamp(uc, lo + wd / 2, hi - wd / 2), v0 = fy - yb + (winD.b0 ?? winD.b ?? 0.95), v1 = v0 + (winD.h0 ?? winD.h ?? 1.45);
         ops.push({ u0: u - wd / 2, u1: u + wd / 2, v0, v1, arch: winD.arch, kind: winKind(0), cu0: u - wd / 2, cu1: u + wd / 2, cv0: v0, cv1: winD.arch ? v1 - wd * 0.2 : v1, f: 0 });
@@ -986,7 +1044,7 @@ function bldg(o) {
           ops.push({ u0: u - wd / 2, u1: u + wd / 2, v0, v1, arch: winD.arch, kind, cu0: u - wd / 2, cu1: u + wd / 2, cv0: v0, cv1: winD.arch ? v1 - wd * 0.2 : v1, f }); }
       }
     }
-    if (o.extraOps) o.extraOps(k, sd, ops);
+    if (o.extraOps) { o.extraOps(k, sd, ops); ops.forEach(op => { if (op.door && !op.reg) { op.reg = true; regDoor(sd, (op.u0 + op.u1) / 2, op.u1 - op.u0, op.v1 - (fy - yb), !!op.inner); } }); }
     loopholes(o, sd, ops, nb, bw, fy - yb, FH, n, lo, hi);
     // top edge
     let top;
@@ -1022,20 +1080,23 @@ function bldg(o) {
   let ceil = eave - 0.3, dark = o.dark ?? 175;
   for (let f = 1; f < n; f++) {
     const y = fy + f * FH, hs = hole.slice();
-    if (ruin > 0.55 && f === n - 1 && chance(0.7)) { const c = collapse(far, rr(0.55, 0.85)); hs.push(c); rubble((c.x0 + c.x1) / 2, (c.z0 + c.z1) / 2, Math.min(c.x1 - c.x0, c.z1 - c.z0) * 0.4, 0.7, y - FH); }
+    if (ruin > 0.55 && f === n - 1 && chance(0.7)) { const c = collapse(far, rr(0.55, 0.85)), rx = (c.x0 + c.x1) / 2, rz = (c.z0 + c.z1) / 2, rr_ = Math.min(c.x1 - c.x0, c.z1 - c.z0) * 0.4; hs.push(c);
+      if (!inLane(bi.doors, rx - rr_ * 1.2, rz - rr_ * 1.2, rx + rr_ * 1.2, rz + rr_ * 1.2, y - FH)) rubble(rx, rz, rr_, 0.7, y - FH); }
     slab(ix0, iz0, ix1, iz1, y - 0.25, y, o.slabMat || M.conc, hs, o.house ? 'wood' : 'concrete');
   }
   if (flat) {
     const hs = access ? hole.slice() : [];
     if (!access && ruin >= 0.5) { const c = collapse(far, rr(0.6, 0.9)); hs.push(c); ceil = fy + (n - 1) * FH - 0.25; dark = n > 1 ? dark : 0;
-      rubble((c.x0 + c.x1) / 2, (c.z0 + c.z1) / 2, Math.min(c.x1 - c.x0, c.z1 - c.z0) * 0.35, 0.8, fy + (n - 1) * FH);
-      const hx = c.x0 + 0.3, g2 = new THREE.BoxGeometry(c.x1 - c.x0 - 0.6, 0.22, Math.min(2.4, c.z1 - c.z0)); G(g2, M.conc, (c.x0 + c.x1) / 2, eave - 1.1, c.z0 + 1.0, 0, 0.75, 0); }
+      const rx = (c.x0 + c.x1) / 2, rz = (c.z0 + c.z1) / 2, rr_ = Math.min(c.x1 - c.x0, c.z1 - c.z0) * 0.35, ly = fy + (n - 1) * FH;
+      if (!inLane(bi.doors, rx - rr_ * 1.2, rz - rr_ * 1.2, rx + rr_ * 1.2, rz + rr_ * 1.2, ly)) rubble(rx, rz, rr_, 0.8, ly);
+      // the fallen roof slab hangs down to head height (no collider): never over a door's lane
+      if (!inLane(bi.doors, c.x0, c.z0 - 0.2, c.x1, c.z0 + 2.2, ly)) { const g2 = new THREE.BoxGeometry(c.x1 - c.x0 - 0.6, 0.22, Math.min(2.4, c.z1 - c.z0)); G(g2, M.conc, rx, eave - 1.1, c.z0 + 1.0, 0, 0.75, 0); } }
     slab(ix0, iz0, ix1, iz1, eave - 0.3, eave, M.conc, hs);
     if (access) { const sx = sp && (sp.rect.x0 + sp.rect.x1) / 2 < cx ? 1.4 : sp ? -1.4 : 0, ox = sx ? Math.sign(sx) * rr(0, 1.5) : rr(-2, 2);   // roof vent box, kept off the stair exit
       const bx = clamp(cx + sx + ox, ix0 + 0.9, ix1 - 0.9); B(bx - 0.8, eave, cz - 0.6, bx + 0.8, eave + 0.9, cz + 0.4, M.metal, 'metal'); }
   } else if (roof === 'none') { ceil = n > 1 ? fy + (n - 1) * FH - 0.25 : -99; dark = n > 1 ? 120 : 0; }
   if (gable) { gableRoof(o, x0, z0, x1, z1, eave, rise, ridgeX, ruin, t); ceil = eave + rise * 0.5; dark = ruin > 0.5 ? 110 : dark; }
-  if (sp) for (let f = 0; f < topF; f++) { uStair(sp, fy + f * FH, FH, f === 0, o.stairMat || M.concD, o.house ? 'wood' : 'concrete'); stairRails(sp, fy + (f + 1) * FH, f + 1 === topF); }
+  if (sp) for (let f = 0; f < topF; f++) { uStair(sp, fy + f * FH, FH, f === 0, o.stairMat || M.conc, o.house ? 'wood' : 'concrete'); stairRails(sp, fy + (f + 1) * FH, f + 1 === topF); }
   if (sp && topF > 0) MAP.stairs.push({ sp, y0: fy, FH, flights: topF, roof: access });
   if (dark && ceil > fy) occRect(x0 + t + 0.3, z0 + t + 0.3, x1 - t - 0.3, z1 - t - 0.3, dark, ceil);
   // bookkeeping: floors for pickups, ground windows for nests, interior for spawns
@@ -1082,13 +1143,14 @@ function gableRoof(o, x0, z0, x1, z1, eave, rise, ridgeX, ruin, t) {
 // a little furniture and junk along the walls, never in front of doors or on the stairs
 function furnish(info) {
   const { ix0, iz0, ix1, iz1, sp, doors, levels } = info;
-  const bad = (x, z, r) => (sp && x > sp.rect.x0 - r - 1.4 && x < sp.rect.x1 + r + 1.4 && z > sp.rect.z0 - r - 1.4 && z < sp.rect.z1 + r + 1.4) || doors.some(d => Math.hypot(d[0] - x, d[2] - z) < 2.2 + r);
+  // r: the footprint the check assumes; the lane test uses 1.2 m, the widest thing (rubble with its scattered bricks)
+  const bad = (x, z, r, y) => (sp && x > sp.rect.x0 - r - 1.4 && x < sp.rect.x1 + r + 1.4 && z > sp.rect.z0 - r - 1.4 && z < sp.rect.z1 + r + 1.4) || doors.some(d => Math.hypot(d[0] - x, d[2] - z) < 2.2 + r) || inLane(doors, x - 1.2, z - 1.2, x + 1.2, z + 1.2, y);
   levels.forEach((y, f) => {
     const cnt = f === 0 ? 3 : 2;
     for (let i = 0; i < cnt; i++) {
       const side = Math.floor(rng() * 4), r = 0.6;
       const x = side === 0 ? ix0 + 0.5 : side === 1 ? ix1 - 0.5 : rr(ix0 + 1, ix1 - 1), z = side === 2 ? iz0 + 0.5 : side === 3 ? iz1 - 0.5 : rr(iz0 + 1, iz1 - 1);
-      if (bad(x, z, r)) continue;
+      if (bad(x, z, r, y)) continue;
       const k = rng();
       if (k < 0.35) { crate(x, z, rr(0.7, 1.0), y + 0.0); }
       else if (k < 0.55) { rubble(x, z, rr(0.6, 1.0), rr(0.35, 0.6), y); }
@@ -1134,7 +1196,7 @@ const pick4 = () => [0, 1, 2, 3, 7][Math.floor(drng() * 5)];
 // broken furniture against the walls of a room; pieces are axis-aligned so their colliders hug them
 function brokenFurniture(info, y, c0) {
   const { ix0, iz0, ix1, iz1, sp, doors } = info;
-  const busy = (x0, z0, x1, z1) => (sp && x1 > sp.rect.x0 - 1.4 && x0 < sp.rect.x1 + 1.4 && z1 > sp.rect.z0 - 1.4 && z0 < sp.rect.z1 + 1.4) || doors.some(d => Math.abs(d[1] - y) < 1 && x1 > d[0] - 1.6 && x0 < d[0] + 1.6 && z1 > d[2] - 1.6 && z0 < d[2] + 1.6) ||
+  const busy = (x0, z0, x1, z1) => (sp && x1 > sp.rect.x0 - 1.4 && x0 < sp.rect.x1 + 1.4 && z1 > sp.rect.z0 - 1.4 && z0 < sp.rect.z1 + 1.4) || doors.some(d => Math.abs(d[1] - y) < 1 && x1 > d[0] - 1.6 && x0 < d[0] + 1.6 && z1 > d[2] - 1.6 && z0 < d[2] + 1.6) || inLane(doors, x0 - 0.1, z0 - 0.1, x1 + 0.1, z1 + 0.1, y) ||
     (() => { for (let i = c0; i < COLL.length; i++) { const c = COLL[i]; if (c.solid && c.y1 > y + 0.1 && c.y0 < y + 1.8 && x1 > c.x0 && x0 < c.x1 && z1 > c.z0 && z0 < c.z1) return true; } return false; })();
   const n = (ix1 - ix0) * (iz1 - iz0) > 60 ? 3 : 2;
   for (let i = 0; i < n * 3 && i < 12; i++) {
@@ -1465,12 +1527,12 @@ function hides(infos) {
   // hunting stands at the wood edges, looking back over the fields into town
   [[148, -22, '-x'], [150, 58, '-x'], [-148, 32, '+x'], [-20, -121, '+z'], [40, -126, '+z']].forEach(([x, z, f]) => { if (coverFree(x, z, 3.2)) huntStand(x, z, f); });
   // truck wrecks on the back roads
-  [[115.6, -44, false, 1], [95, 101.4, true, -1], [-91.5, 19.6, true, 1], [-75, 118, false, 1]].forEach(([x, z, ax, fl]) => truck(x, z, ax, fl));
+  [[115.6, -44, false, 1], [95, 101.4, true, -1], [-104, 19.9, true, 1], [-75, 118, false, 1]].forEach(([x, z, ax, fl]) => truck(x, z, ax, fl));
   // a car burning on the south road, the creek mist, lanterns by some doors
   burningCar(18.6, 30, Math.PI / 2 + 0.15);
   [[0.9, 40, 0], [1.7, 55, 0.37]].forEach(([dy, vs, vo]) => { const flat = CREEK.bed.map(b => b + 0.35 + dy), g0 = STATIC.has(M.fogBank) ? STATIC.get(M.fogBank).geos.length : 0;
     ribbon(CREEK.P, -10, 10, 0, M.fogBank, { flatY: flat, nA: 3, across: true, vs }); const ge = STATIC.get(M.fogBank).geos[g0], uv = ge.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setY(i, uv.getY(i) + vo); });
-  MAP.doors.forEach(d => { if (hrng() > 0.1) return; const [px, py, pz] = d.p, nx = d.ax === 'x' ? 0 : 1, nz = d.ax === 'x' ? 1 : 0;
+  MAP.doors.forEach(d => { if (d.inner || hrng() > 0.1) return; const [px, py, pz] = d.p, nx = d.ax === 'x' ? 0 : 1, nz = d.ax === 'x' ? 1 : 0;
     const inB = (x, z) => MAP.buildings.some(b => x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1), sgn = inB(px + nx * 0.6, pz + nz * 0.6) ? -1 : 1, off = d.w / 2 + 0.45;
     const lx = px + sgn * nx * 0.5 + (d.ax === 'x' ? off : 0), lz = pz + sgn * nz * 0.5 + (d.ax === 'x' ? 0 : off); lantern(lx, py + 2.1, lz, sgn * nx, sgn * nz); });
   { const gy = terrainY(68, 14); [[65, 12.5], [71, 17]].forEach(([x, z]) => { WIRES.push(x, gy + 4.4, z, x, gy + 3.8, z); G(new THREE.CylinderGeometry(0.1, 0.12, 0.28, 6, 1), M.lamp, x, gy + 3.6, z); G(new THREE.ConeGeometry(0.15, 0.13, 6, 1), M.metal, x, gy + 3.8, z); }); }
@@ -1554,9 +1616,9 @@ function buildMap(scene) {
     slabMat: M.wood, floorMat: M.floorW, stairMat: M.woodD, doors: [[f, 0.5], [opp[f], i % 3 === 0 && (f === 'E' || f === 'S') ? 0.75 : 0.3], [f === 'N' || f === 'S' ? 'E' : 'S', 0.5]], bay: 2.9, win: { w: 1.1, h: 1.35 }, yard: true, house: true, glow: i % 5 === 1 ? 0.25 : 0 }));
   // church on the hill: tower with stairs to the belfry, nave with a fallen roof
   const nave = nb({ fx: 70, fz: -102.5, x0: 70, x1: 92, z0: -108, z1: -97, n: 1, FH: 6.6, t: 0.6, mat: M.stone, roof: 'gable', ridge: 'x', ruin: 0.75, rise: 4.2, doors: [['S', 0.25, 2.0], ['N', 0.6]], archDoor: true, win: { w: 1.3, h: 3.0, b0: 2.2, arch: true }, bay: 4.4, trim: M.concD, chimney: false,
-    extraOps: (k, sd, ops) => { if (k === 'W') ops.push({ door: true, u0: sd.L / 2 - 1.0, u1: sd.L / 2 + 1.0, v0: 0, v1: 0.68 + 3.2, arch: true, cu0: sd.L / 2 - 1.0, cu1: sd.L / 2 + 1.0, cv0: -1, cv1: 3.4 }); if (k === 'E') ops.push({ round: true, u0: sd.L / 2 - 1.2, u1: sd.L / 2 + 1.2, v0: 7.6, v1: 10.0, cu0: sd.L / 2 - 0.8, cu1: sd.L / 2 + 0.8, cv0: 8.0, cv1: 9.6 }); } });
+    extraOps: (k, sd, ops) => { if (k === 'W') ops.push({ door: true, inner: true, u0: sd.L / 2 - 0.9, u1: sd.L / 2 + 0.9, v0: 0, v1: 0.68 + 3.0, arch: true, cu0: sd.L / 2 - 0.9, cu1: sd.L / 2 + 0.9, cv0: -1, cv1: 3.2 }); if (k === 'E') ops.push({ round: true, u0: sd.L / 2 - 1.2, u1: sd.L / 2 + 1.2, v0: 7.6, v1: 10.0, cu0: sd.L / 2 - 0.8, cu1: sd.L / 2 + 0.8, cv0: 8.0, cv1: 9.6 }); } });
   const tower = nb({ fx: 70, fz: -102.5, x0: 63.4, x1: 70.0, z0: -105.8, z1: -99.2, n: 4, FH: 3.2, t: 0.5, mat: M.stone, ruin: 0.06, par: 1.1, stair: 'NW', stairAx: 'z', doors: [['S', 0.5, 1.6]], archDoor: true, win: { w: 0.7, h: 1.4, b: 1.0, arch: true }, trim: M.concD, bay: 6,
-    extraOps: (k, sd, ops) => { if (k === 'E') ops.push({ door: true, u0: sd.L / 2 - 0.85, u1: sd.L / 2 + 0.85, v0: 0, v1: 0.68 + 2.6, arch: true, cu0: sd.L / 2 - 0.85, cu1: sd.L / 2 + 0.85, cv0: -1, cv1: 2.9 });
+    extraOps: (k, sd, ops) => { if (k === 'E') ops.push({ door: true, inner: true, u0: sd.L / 2 - 0.9, u1: sd.L / 2 + 0.9, v0: 0, v1: 0.68 + 3.0, arch: true, cu0: sd.L / 2 - 0.9, cu1: sd.L / 2 + 0.9, cv0: -1, cv1: 3.2 });
       for (let i = ops.length - 1; i >= 0; i--) if (ops[i].f === 3) ops.splice(i, 1);
       const v0 = 0.68 + 9.6 + 0.95; ops.push({ u0: sd.L / 2 - 0.9, u1: sd.L / 2 + 0.9, v0, v1: v0 + 1.8, arch: true, kind: 'none', cu0: sd.L / 2 - 0.9, cu1: sd.L / 2 + 0.9, cv0: v0, cv1: v0 + 1.45, f: 3 }); } });
   // industry south of the creek
@@ -1653,8 +1715,9 @@ function buildMap(scene) {
     [[114, 136, true], [121, 136, true], [121, 136, true, 1], [130, 137, false], [136, 137, false], [143, 136, true], [116, 146, true], [126, 147, true], [126, 147, true, 1], [140, 147, true], [147, 145, false]].forEach(([x, z, ax, lv]) => container(x, z, ax, cm(), terrainY(x, z) + (lv ? 2.59 : 0)));
     container(133, 146, true, cm(), null, true);
     const gy = wh.g + 0.08; [[116, 116], [118.5, 116.3], [124, 122], [132, 116], [136, 122]].forEach(([x, z]) => crate(x, z, rr(1, 1.3), gy, rr(-0.3, 0.3)));
-    barrel(128, 113, M.rust, gy); barrel(128.7, 113.4, M.rust, gy, true); fireBarrel(104, 109.5, true);
-    fence([[44, 141], [106, 141]], 'chain'); fence([[106, 141], [106, 155], [152, 155], [152, 108]], 'chain'); }
+    barrel(132.6, 113, M.rust, gy); barrel(133.3, 113.4, M.rust, gy, true); fireBarrel(104, 109.5, true);
+    // (no chain-link fence round the yards any more: spawns in the south fields were fenced out of town)
+  }
   // workshop yard
   { const gy = terrainY(-12, 112); wreck(-2, 112, 0.3, false); container(10, 108, true, M.corrG); barrel(-18, 110, M.rust); barrel(-17.4, 110.6, M.burnt, null, true); rubble(4, 98, 1.8, 0.9); debris(-6, 112, 8, 12); crate(-14, 92.5, 1.1); void gy; }
   // barn: hay loft floor inside, junk around
@@ -1664,7 +1727,7 @@ function buildMap(scene) {
   // ---- wrecks, rubble, junk across town ----
   [[-80, -2.5, 0.08], [-35, 2.2, Math.PI + 0.1], [8, -2.6, -0.15], [33, 3, 0.25], [70, -3.2, Math.PI - 0.08], [118, -4, 2.9], [-126, 3, 0.2], [-60.5, -48, Math.PI / 2 + 0.1], [-46, 44, 1.4], [23, 46, Math.PI / 2 - 0.2], [42.5, -28, Math.PI / 2 + 0.3], [-68, -92, 1.75],
    [-2, -63, 0.1], [25, 85, 1.6], [80, 103.8, 0.2], [-110, -61, 0.05], [52, 3.5, 0.06], [-14, 3.2, Math.PI - 0.3]].forEach(([x, z, yaw], i) => { wreck(x, z, yaw, i % 3 !== 0); });
-  [[-71, -15, 2.2, 1.1], [-5, 22, 2.6, 1.3], [-76, 22, 2.4, 1.2], [-25, 0, 1.2, 0.5], [57, -5, 1.4, 0.6], [-50, -3.6, 1.2, 0.5], [84, -20, 2, 0.9], [-92, 4.3, 1.1, 0.5], [31, -42, 2.2, 1.0], [41.5, 22.5, 1.6, 0.8], [-17, 21.5, 1.4, 0.7],
+  [[-71, -15, 2.2, 1.1], [-5, 22, 2.6, 1.3], [-79, 23, 2.4, 1.2], [-25, 0, 1.2, 0.5], [57, -5, 1.4, 0.6], [-50, -3.6, 1.2, 0.5], [86.5, -21, 2, 0.9], [-92, 4.3, 1.1, 0.5], [31, -42, 2.2, 1.0], [41.5, 22.5, 1.6, 0.8], [-17, 21.5, 1.4, 0.7],
    [-83, 23, 1.2, 0.5], [9, 21, 1.5, 0.7], [-58, 22, 1.4, 0.6]].forEach(([x, z, r, h]) => { if (!inLot(x, z, 0.3)) rubble(x, z, r, h); debris(x, z, r * 2.5, 6); });
   for (let i = 0; i < 40; i++) { const x = rr(-110, 100), z = rr(-25, 25); if (!inLot(x, z, 0.5)) debris(x, z, 2, 3); }
   [[-62, -12], [-30.5, -20], [18.5, 21], [59, -21], [-87, 22.5], [43, 21], [-44, -60]].forEach(([x, z]) => { if (!inLot(x, z, 0.5)) barrel(x, z, pick([M.rust, M.burnt]), null, chance(0.4)); });
@@ -1695,7 +1758,7 @@ function buildMap(scene) {
     });
     if (dch(0.45)) { const bk = opp[f], off = 1.9; let a, b;   // washing line in the back yard
       if (bk === 'N' || bk === 'S') { const zz = bk === 'N' ? o.z0 - off : o.z1 + off; a = [o.x0 + 1, zz]; b = [o.x1 - 1, zz]; } else { const xx = bk === 'W' ? o.x0 - off : o.x1 + off; a = [xx, o.z0 + 1]; b = [xx, o.z1 - 1]; }
-      if (!nearRoad(a[0], a[1], 1) && !nearRoad(b[0], b[1], 1)) laundry(a[0], a[1], b[0], b[1]); }
+      if (!nearRoad(a[0], a[1], 1) && !nearRoad(b[0], b[1], 1) && !MAP.doors.some(d => [a, b].some(q => Math.hypot(d.p[0] - q[0], d.p[2] - q[1]) < 2.8))) laundry(a[0], a[1], b[0], b[1]); }
     const yx = chance(0.5) ? o.x0 - 1.8 : o.x1 + 1.8, yz = rr(o.z0, o.z1); if (!nearRoad(yx, yz, 1) && !inLot(yx, yz, 0.3)) { if (chance(0.5)) bush(yx, yz, rr(0.9, 1.4)); else grassPatch(yx, yz, rr(1.6, 2.4), 1.2); }
     if (chance(0.6)) { const tx = o.x1 + 2.2, tz = o.z1 + 2.2; if (!nearRoad(tx, tz, 1.5) && !inLot(tx, tz, 0.8)) (chance(0.5) ? broadleaf : deadTree)(tx, tz, rr(7, 10)); }
   });

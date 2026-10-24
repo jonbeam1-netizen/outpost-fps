@@ -82,7 +82,6 @@ Goal from the user: turn Outpost into HOLDOVER, a sneaky sniper deathmatch in a 
 - guns.js detailed models + M9 bayonet (shiny damascus)  - map.js big dusk town
 - audio.js + fx.js (blood, cool tracers, quieter-but-audible suppressors)  - character.js ghillie suits + prone
 
-## Open at end of session (2026-10-24)
-- js/map.js has UNPUSHED, unverified edits from a map agent working on: church arched doorway (stepped/smeared
-  reveal, table in the door path), removing the factory-district chain-link fence, lifting pitch-black interiors
-  (occlusion ~0.6 -> ~0.4, near-black materials to dark grey). Check `git diff js/map.js`, test in game, then push.
+## End of session (2026-10-24)
+- Map fixes verified and pushed: church arch reveals, door lanes kept clear of furniture, factory chain-link
+  fence removed, interiors lifted (occlusion 0.4, no near-black materials) plus an ambient fill light.
